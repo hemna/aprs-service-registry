@@ -1,3 +1,6 @@
 click
 oslo.config
 fastapi
+uvicorn
+jinja2
+wrapt
