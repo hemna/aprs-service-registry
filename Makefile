@@ -1,5 +1,5 @@
 WORKDIR?=.
-VENVDIR ?= $(WORKDIR)/.aprsd-irc-venv
+VENVDIR ?= $(WORKDIR)/.aprsd-service-registry-venv
 
 .DEFAULT_GOAL := help
 
@@ -69,12 +69,6 @@ check: dev ## Code format check with tox and pep8
 
 fix: dev ## fixes code formatting with gray
 	tox -efmt
-
-docker: test  ## Make a docker container tagged with hemna6969/aprsd:latest
-	docker build -t hemna6969/aprsd:latest -f docker/Dockerfile docker
-
-docker-dev: test  ## Make a development docker container tagged with hemna6969/aprsd:master
-	docker build -t hemna6969/aprsd:master -f docker/Dockerfile-dev docker
 
 update-requirements: dev  ## Update the requirements.txt and dev-requirements.txt files
 	rm requirements.txt
