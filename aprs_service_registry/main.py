@@ -28,6 +28,7 @@ class registryRequest(BaseModel):
     description: str
     service_website: str
     uptime: str
+    software: str
 
 
 class APRSServices(objectstore.ObjectStoreMixin):
@@ -69,7 +70,7 @@ async def get(request: Request):
         request=request,
         name="index.html",
         context={"request": request,
-                 "services": services_str}
+                 "services": services}
     )
 
 

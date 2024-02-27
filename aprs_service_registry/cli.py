@@ -6,6 +6,7 @@ import click
 
 import aprs_service_registry
 from aprs_service_registry import conf, cli_helper, log
+from aprs_service_registry import main as registry_main
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
@@ -28,6 +29,8 @@ def server(ctx):
     """Start the aprs service registry server gateway process."""
     # Dump all the config options now.
     CONF.log_opt_values(LOG, logging.DEBUG)
+    LOG.info(f"APRS Service Registry Started version: {aprs_service_registry.__version__}")
+    registry_main.APRSServices().load()
 
     server = Server(
         Config(
@@ -40,7 +43,8 @@ def server(ctx):
     )
     log.setup_logging(loglevel=CONF.log_level)
     server.run()
-    return
+    LOG.info("APRS Service Registry Stopped")
+    registry_main.APRSServices().save()
 
 
 @cli.command()

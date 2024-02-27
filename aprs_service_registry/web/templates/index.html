@@ -1,3 +1,91 @@
 <html>
-  Services {{ services }}
+<head>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+          integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+          crossorigin="anonymous"></script>
+ <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+       integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+       crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"
+          integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+"
+          crossorigin="anonymous"></script>
+ <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+         integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+         crossorigin="anonymous"></script>
+ <link rel="stylesheet" href="https://cdn.datatables.net/2.0.0/css/dataTables.dataTables.css" />
+ <script src="https://cdn.datatables.net/2.0.0/js/dataTables.js"></script>
+
+  <script>
+    $(document).ready( function () {
+      $('#services').DataTable();
+    } );
+  </script>
+</head>
+
+<div class="container">
+  <h1>APRS Service Registry</h1>
+    <p>This website is dedicated to providing a list of all known APRS Services available
+    on the APRS Network, so the services are easily found by Ham radio operators.</p>
+  <table id="services" class="display" style="width:100%">
+    <thead>
+      <tr>
+        <th>Service Callsign</th>
+        <th>Service Description</th>
+        <th>Service URL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for service in services %}
+      <tr>
+        <td>{{ service }}</td>
+        <td>{{ services[service].description }}</td>
+        <td><a target="_" href="{{ services[service].service_website }}">{{ services[service].service_website }}</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+</div>
+<div class="container">
+   <h3>How to register your service?</h3>
+    <p>The service registry API documentation is here: <a href="/docs">API Documentation</a></p>
+    <p>You can do so programmatically, by sending an HTTP POST to the following address.</p>
+    <p>http://aprs.hemna.com/api/v1/register</p>
+    <pre>with the following JSON contents in the body of the POST request.</pre>
+    <pre>
+    {"callsign": "Your service callsign here.",
+     "description": "The description of your service here.",
+     "service_website": "The URL of your service here.",
+     "uptime": "the uptime of your service here."}
+    </pre>
+
+    <h3>example</h3>
+    <pre>
+    {"callsign": "REPEAT",
+     "description": "Find the nearest N repeaters to your current location",
+     "service_website": "http://aprs-repeat.hemna.com",
+     "uptime": "00:60:00"}
+    </pre>
+
+    <h3>Send a registry with curl like this</h3>
+    <pre>
+    curl -X POST -H "Content-Type: application/json" -d '{"callsign": "REPEAT", "description": "Find the nearest N repeaters to your current location", "service_website": "http://aprs-repeat.hemna.com", "uptime": "00:60:00"}' http://aprs.hemna.com/api/v1/register
+    </pre>
+
+    <h3>Using APRSD</h3>
+    <p> If you are using <a href="https://pypi.org/project/aprsd/">APRSD python daemon</a> version 3.3.0 and greater, as your APRS Service,
+    you can simply enable the aprs registry feature.</p>
+    <p>You can enable the registry feature in your aprsd.conf config file by adding the new aprs_registry section.</p>
+    <h4>Example</h4>
+    <pre>
+        [aprs_registry]
+        # Enable the automatic registry feature
+        enable = true
+        # The description of your service
+        description = My service does X, Y, and Z.
+        # The URL of your service
+        service_website = http://myaprsservice.com
+        # Every 900 seconds (15 minutes) the registry will be updated.
+        frequency_seconds = 900
+    </pre>
+</div>
 </html>
