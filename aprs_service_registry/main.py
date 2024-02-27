@@ -53,7 +53,8 @@ class APRSServices(objectstore.ObjectStoreMixin):
 
     @wrapt.synchronized(lock)
     def remove(self, callsign):
-        del self.data[callsign]
+        if callsign in self.data:
+            del self.data[callsign]
 
 
 @app.on_event("startup")
@@ -85,6 +86,13 @@ async def registry(request: registryRequest):
         LOG.info(f"{service}: {services[service].description} - {services[service].service_website} - {services[service].uptime}")
     return json.dumps({"status": "ok"})
 
+@app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
+async def registry_delete(callsign: str):
+    """Remove a service from the registry."""
+    services = APRSServices()
+    LOG.info(f"Removing {callsign} from the registry.")
+    services.remove(callsign.upper())
+    return json.dumps({"status": "ok"})
 
 async def ws_process_balls(msg):
     time.sleep(2)
