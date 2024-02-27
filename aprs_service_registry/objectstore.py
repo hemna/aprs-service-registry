@@ -24,6 +24,9 @@ class ObjectStoreMixin:
     When APRSD Starts, it calls load()
     aprsd server -f (flush) will wipe all saved objects.
     """
+    # Should we nuke the old pickle file on save
+    # if there is nothing to save?
+    flush_on_save = False
 
     def __len__(self):
         return len(self.data)
@@ -78,7 +81,7 @@ class ObjectStoreMixin:
             )
             with open(self._save_filename(), "wb+") as fp:
                 pickle.dump(self._dump(), fp)
-        else:
+        elif self.flush_on_save:
             LOG.debug(
                 "{} Nothing to save, flushing old save file '{}'".format(
                     self.__class__.__name__,

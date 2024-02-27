@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi_utils.tasks import repeat_every
 import json
 import logging
 from oslo_config import cfg
@@ -56,16 +57,16 @@ class APRSServices(objectstore.ObjectStoreMixin):
         del self.data[callsign]
 
 
+@app.on_event("startup")
+@repeat_every(seconds=60)
+def save_services(*args, **kwargs):
+    APRSServices().save()
+    print(time.time())
 
 
 @app.get("/", response_class=HTMLResponse)
 async def get(request: Request):
-    LOG.debug("PISS")
-    services_str = ""
     services = APRSServices()
-    for service in services:
-        services_str += f"{service} - {services[service].description}\n"
-
     return templates.TemplateResponse(
         request=request,
         name="index.html",

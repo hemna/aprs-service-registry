@@ -5,3 +5,4 @@ uvicorn
 jinja2
 wrapt
 loguru
+fastapi_utils

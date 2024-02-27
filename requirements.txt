@@ -4,14 +4,14 @@
 #
 #    pip-compile --annotation-style=line requirements.in
 #
-annotated-types==0.6.0    # via pydantic
 anyio==4.3.0              # via starlette
 certifi==2024.2.2         # via requests
 charset-normalizer==3.3.2  # via requests
 click==8.1.7              # via -r requirements.in, uvicorn
 debtcollector==3.0.0      # via oslo-config
 exceptiongroup==1.2.0     # via anyio
-fastapi==0.110.0          # via -r requirements.in
+fastapi==0.110.0          # via -r requirements.in, fastapi-utils
+fastapi-utils==0.2.1      # via -r requirements.in
 h11==0.14.0               # via uvicorn
 idna==3.6                 # via anyio, requests
 jinja2==3.1.3             # via -r requirements.in
@@ -21,15 +21,15 @@ netaddr==1.2.1            # via oslo-config
 oslo-config==9.4.0        # via -r requirements.in
 oslo-i18n==6.3.0          # via oslo-config
 pbr==6.0.0                # via oslo-i18n, stevedore
-pydantic==2.6.2           # via fastapi
-pydantic-core==2.16.3     # via pydantic
+pydantic==1.10.14         # via fastapi, fastapi-utils
 pyyaml==6.0.1             # via oslo-config
 requests==2.31.0          # via oslo-config
 rfc3986==2.0.0            # via oslo-config
 sniffio==1.3.1            # via anyio
+sqlalchemy==1.4.51        # via fastapi-utils
 starlette==0.36.3         # via fastapi
 stevedore==5.2.0          # via oslo-config
-typing-extensions==4.10.0  # via anyio, fastapi, pydantic, pydantic-core, uvicorn
+typing-extensions==4.10.0  # via anyio, fastapi, pydantic, uvicorn
 urllib3==2.2.1            # via requests
 uvicorn==0.27.1           # via -r requirements.in
 wrapt==1.16.0             # via -r requirements.in, debtcollector
