@@ -32,6 +32,7 @@
         <th>Service Callsign</th>
         <th>Service Description</th>
         <th>Service URL</th>
+        <th>Software Signature</th>
       </tr>
     </thead>
     <tbody>
@@ -40,6 +41,7 @@
         <td>{{ service }}</td>
         <td>{{ services[service].description }}</td>
         <td><a target="_" href="{{ services[service].service_website }}">{{ services[service].service_website }}</a></td>
+        <td>{{ services[service].software }}</td>
       </tr>
       {% endfor %}
     </tbody>
