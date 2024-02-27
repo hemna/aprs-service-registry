@@ -79,7 +79,8 @@ async def registry(request: registryRequest):
     """Register a service with the registry and/or update uptime."""
     LOG.info(f"registry: {request}")
     services = APRSServices()
-    services.add(request.callsign, request)
+    request.callsign = request.callsign.upper()
+    services.add(request.callsign.upper(), request)
     for service in services:
         LOG.info(f"{service}: {services[service].description} - {services[service].service_website} - {services[service].uptime}")
     return json.dumps({"status": "ok"})
