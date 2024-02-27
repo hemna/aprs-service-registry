@@ -64,7 +64,7 @@ def save_services(*args, **kwargs):
     print(time.time())
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
     services = APRSServices()
     return templates.TemplateResponse(
