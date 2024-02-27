@@ -55,7 +55,8 @@
     {"callsign": "Your service callsign here.",
      "description": "The description of your service here.",
      "service_website": "The URL of your service here.",
-     "uptime": "the uptime of your service here."}
+     "uptime": "the uptime of your service here.",
+     "software": "The service software and version here"}
     </pre>
 
     <h3>example</h3>
@@ -63,12 +64,13 @@
     {"callsign": "REPEAT",
      "description": "Find the nearest N repeaters to your current location",
      "service_website": "http://aprs-repeat.hemna.com",
-     "uptime": "00:60:00"}
+     "uptime": "00:60:00",
+     "software": "APRSD version 3.3.0"}
     </pre>
 
     <h3>Send a registry with curl like this</h3>
     <pre>
-    curl -X POST -H "Content-Type: application/json" -d '{"callsign": "REPEAT", "description": "Find the nearest N repeaters to your current location", "service_website": "http://aprs-repeat.hemna.com", "uptime": "00:60:00"}' http://aprs.hemna.com/api/v1/register
+    curl -X POST -H "Content-Type: application/json" -d '{"callsign": "REPEAT", "description": "Find the nearest N repeaters to your current location", "service_website": "http://aprs-repeat.hemna.com", "uptime": "00:60:00", "software": "APRSD version 3.3.0"}' http://aprs.hemna.com/api/v1/register
     </pre>
 
     <h3>Using APRSD</h3>
