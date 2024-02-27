@@ -33,7 +33,7 @@ class InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
-def setup_logging(loglevel: int):
+def setup_logging():
     # intercept everything at the root logger
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(CONF.log_level)

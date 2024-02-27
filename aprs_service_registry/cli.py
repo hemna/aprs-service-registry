@@ -41,7 +41,7 @@ def server(ctx):
             log_level=logging.DEBUG,
         ),
     )
-    log.setup_logging(loglevel=CONF.log_level)
+    log.setup_logging()
     server.run()
     LOG.info("APRS Service Registry Stopped")
     registry_main.APRSServices().save()

@@ -22,17 +22,6 @@ F = t.TypeVar("F", bound=t.Callable[..., t.Any])
 
 common_options = [
     click.option(
-        "--loglevel",
-        default="INFO",
-        show_default=True,
-        type=click.Choice(
-            ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
-            case_sensitive=False,
-        ),
-        show_choices=True,
-        help="The log level to use for aprsd.log",
-    ),
-    click.option(
         "-c",
         "--config",
         "config_file",
@@ -103,11 +92,8 @@ def process_standard_options(f: F) -> F:
             )
         except cfg.ConfigFilesNotFoundError:
             config_file_found = False
-        ctx.obj["loglevel"] = kwargs["loglevel"]
         # ctx.obj["config_file"] = kwargs["config_file"]
-        log.setup_logging(
-            ctx.obj["loglevel"],
-        )
+        log.setup_logging()
         if CONF.trace_enabled:
             trace.setup_tracing(["method", "api"])
 
@@ -115,7 +101,6 @@ def process_standard_options(f: F) -> F:
             LOG = logging.getLogger(__name__)   # noqa: N806
             LOG.error("No config file found!! run 'aprsd sample-config'")
 
-        del kwargs["loglevel"]
         del kwargs["config_file"]
         return f(*args, **kwargs)
 
