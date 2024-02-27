@@ -28,7 +28,6 @@ class registryRequest(BaseModel):
     callsign: str
     description: str
     service_website: str
-    uptime: str
     software: str
 
 
