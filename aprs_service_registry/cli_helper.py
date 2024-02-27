@@ -87,7 +87,7 @@ def process_standard_options(f: F) -> F:
             default_config_files = None
         try:
             CONF(
-                [], project="aprsd", version=aprs_service_registry.__version__,
+                [], project="aprs_service_registry", version=aprs_service_registry.__version__,
                 default_config_files=default_config_files,
             )
         except cfg.ConfigFilesNotFoundError:
