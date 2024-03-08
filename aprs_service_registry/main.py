@@ -77,13 +77,13 @@ async def get(request: Request):
 
 @app.post("/api/v1/registry", response_class=JSONResponse)
 async def registry(request: registryRequest):
-    """Register a service with the registry and/or update uptime."""
+    """Register a service with the registry and/or update."""
     LOG.info(f"registry: {request}")
     services = APRSServices()
     request.callsign = request.callsign.upper()
     services.add(request.callsign.upper(), request)
     for service in services:
-        LOG.info(f"{service}: {services[service].description} - {services[service].service_website} - {services[service].uptime}")
+        LOG.info(f"{service}: {services[service].description} - {services[service].service_website}")
     return json.dumps({"status": "ok"})
 
 @app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
