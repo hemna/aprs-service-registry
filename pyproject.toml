@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aprsd-service-registry"
+dynamic = ["version"]
+description = "Amateur radio APRS Services registry"
+readme = { file = "README.rst", content-type = "text/x-rst" }
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Walter A. Boring IV", email = "waboring@hemna.com" },
+]
+urls = { Homepage = "http://aprsd.readthedocs.org", Source = "https://github.com/hemna/aprsd-service-registry", Tracker = "https://github.com/hemna/aprsd-service-registry/issues" }
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Communications :: Ham Radio",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "click",
+    "fastapi",
+    "fastapi-utils",
+    "jinja2",
+    "loguru",
+    "oslo.config",
+    "uvicorn",
+    "wrapt",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8",
+    "gray",
+    "isort",
+    "mypy",
+    "pep8-naming",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "Sphinx",
+    "tox",
+]
+
+[project.scripts]
+aprs-service-registry = "aprs_service_registry.cli:main"
+
+[project.entry-points."oslo.config.opts"]
+aprs_service_registry.conf = "aprs_service_registry.conf.common:list_opts"
+
+[tool.setuptools.dynamic]
+version = { attr = "aprs_service_registry._version:__version__" }
+
+[tool.setuptools.packages.find]
+packages = ["aprs_service_registry"]

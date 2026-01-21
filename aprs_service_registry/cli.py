@@ -35,8 +35,8 @@ def server(ctx):
     server = Server(
         Config(
             "aprs_service_registry.main:app",
-            host=CONF.web_ip,
-            port=CONF.web_port,
+            host=CONF.registry.web_ip,
+            port=CONF.registry.web_port,
             reload=True,
             log_level=logging.DEBUG,
         ),

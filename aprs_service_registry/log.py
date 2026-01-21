@@ -36,7 +36,7 @@ class InterceptHandler(logging.Handler):
 def setup_logging():
     # intercept everything at the root logger
     logging.root.handlers = [InterceptHandler()]
-    logging.root.setLevel(CONF.log_level)
+    logging.root.setLevel(CONF.registry.log_level)
 
     # remove every other logger's handlers
     # and propagate to root logger

@@ -10,7 +10,4 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import pbr.version
-
-
-__version__ = pbr.version.VersionInfo("aprs_service_registry").version_string()
+from aprs_service_registry._version import __version__

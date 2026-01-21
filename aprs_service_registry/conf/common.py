@@ -16,7 +16,12 @@ LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
 }
 
-main_opts = [
+registry_group = cfg.OptGroup(
+    name="registry",
+    title="Service Registry settings",
+)
+
+registry_opts = [
     cfg.BoolOpt(
         "enable_save",
         default=True,
@@ -52,10 +57,12 @@ main_opts = [
 
 
 def register_opts(config):
-    config.register_opts(main_opts)
+    config.register_group(registry_group)
+    config.register_opts(registry_opts, group=registry_group)
 
 
 def list_opts():
     return {
-        "DEFAULT": main_opts,
+        "DEFAULT": [],
+        registry_group.name: registry_opts,
     }

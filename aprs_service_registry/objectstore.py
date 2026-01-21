@@ -43,9 +43,9 @@ class ObjectStoreMixin:
             return self.data[id]
 
     def _init_store(self):
-        if not CONF.enable_save:
+        if not CONF.registry.enable_save:
             return
-        sl = CONF.save_location
+        sl = CONF.registry.save_location
         if not os.path.exists(sl):
             LOG.warning(f"Save location {sl} doesn't exist")
             try:
@@ -54,7 +54,7 @@ class ObjectStoreMixin:
                 LOG.exception(ex)
 
     def _save_filename(self):
-        save_location = CONF.save_location
+        save_location = CONF.registry.save_location
 
         return "{}/{}.p".format(
             save_location,
@@ -71,13 +71,13 @@ class ObjectStoreMixin:
 
     def save(self):
         """Save any queued to disk?"""
-        if not CONF.enable_save:
+        if not CONF.registry.enable_save:
             return
         if len(self) > 0:
             LOG.info(
                 f"{self.__class__.__name__}::Saving"
                 f" {len(self)} entries to disk at"
-                f"{CONF.save_location}",
+                f"{CONF.registry.save_location}",
             )
             with open(self._save_filename(), "wb+") as fp:
                 pickle.dump(self._dump(), fp)
@@ -91,7 +91,7 @@ class ObjectStoreMixin:
             self.flush()
 
     def load(self):
-        if not CONF.enable_save:
+        if not CONF.registry.enable_save:
             return
         if os.path.exists(self._save_filename()):
             try:
@@ -113,7 +113,7 @@ class ObjectStoreMixin:
 
     def flush(self):
         """Nuke the old pickle file that stored the old results from last aprsd run."""
-        if not CONF.enable_save:
+        if not CONF.registry.enable_save:
             return
         if os.path.exists(self._save_filename()):
             pathlib.Path(self._save_filename()).unlink()
