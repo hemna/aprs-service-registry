@@ -1,0 +1,24 @@
+services:
+  aprs-service-registry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aprs-service-registry
+    ports:
+      - "8099:80"  # Map host port 8001 to container port 80
+    volumes:
+      # Mount config file (optional - will use default if not provided)
+      - ./config/registry.conf:/app/config/registry.conf:ro
+      # Persist registered services data
+      - aprs-registry-data:/home/app/.config/aprs_service_registry
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  aprs-registry-data:
+    driver: local

@@ -94,7 +94,7 @@ def process_standard_options(f: F) -> F:
             config_file_found = False
         # ctx.obj["config_file"] = kwargs["config_file"]
         log.setup_logging()
-        if CONF.trace_enabled:
+        if CONF.registry.trace_enabled:
             trace.setup_tracing(["method", "api"])
 
         if not config_file_found:

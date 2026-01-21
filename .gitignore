@@ -61,3 +61,7 @@ Makefile.venv
 # Copilot
 .DS_Store
 .idea
+
+# Docker config (keep example files)
+config/registry.conf
+!config/*.example

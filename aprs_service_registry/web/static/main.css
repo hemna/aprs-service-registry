@@ -1,0 +1,528 @@
+/* APRS Service Registry — modern UI
+   Variables, typography, and components
+*/
+:root {
+  --bg: #f8fafc;
+  --bg-elevated: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --accent: #0d9488;
+  --accent-hover: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --transition: 0.2s ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Header ---- */
+.site-header {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow);
+}
+
+.header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.site-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.site-tagline {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0.15rem 0 0 0;
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-link {
+  padding: 0.5rem 0.9rem;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: background var(--transition), color var(--transition);
+}
+
+.nav-link:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.nav-link--outline {
+  border: 1px solid var(--border-strong);
+}
+
+.nav-link--outline:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---- Main ---- */
+main {
+  flex: 1;
+  padding: 2rem 0 3rem;
+}
+
+.section {
+  margin-bottom: 2.5rem;
+}
+
+.section:last-of-type {
+  margin-bottom: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.section-header h2,
+.section h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.02em;
+}
+
+.section-desc {
+  color: var(--text-muted);
+  margin: 0 0 1.25rem 0;
+  max-width: 42rem;
+}
+
+.badge-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+}
+
+/* ---- Table card ---- */
+.table-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.services-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.services-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.9rem 1.1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.services-table td {
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.services-table tbody tr {
+  transition: background var(--transition);
+}
+
+.services-table tbody tr:hover {
+  background: var(--accent-soft);
+}
+
+.services-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.callsign {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.link-external {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+  transition: color var(--transition);
+}
+
+.link-external:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.software {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: var(--bg);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+/* ---- Empty state ---- */
+.empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: var(--text-muted);
+}
+
+.empty-state__icon {
+  font-size: 2.5rem;
+  color: var(--border-strong);
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+
+.empty-state h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 0.5rem 0;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ---- Register section ---- */
+.section--register h2 {
+  margin-bottom: 0.5rem;
+}
+
+.section--register > .container > p:first-of-type {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.section--register a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.section--register a:hover {
+  color: var(--accent-hover);
+}
+
+/* ---- Accordion overrides ---- */
+.accordion-docs {
+  --bs-accordion-border-color: var(--border);
+  --bs-accordion-btn-bg: var(--bg-elevated);
+  --bs-accordion-active-bg: var(--accent-soft);
+  --bs-accordion-btn-focus-box-shadow: 0 0 0 0.2rem var(--accent-soft);
+  --bs-accordion-border-radius: var(--radius);
+}
+
+.accordion-docs .accordion-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.accordion-docs .accordion-item:last-child {
+  margin-bottom: 0;
+}
+
+.accordion-docs .accordion-button {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  padding: 1rem 1.25rem;
+  background: transparent;
+  box-shadow: none;
+}
+
+.accordion-docs .accordion-button:not(.collapsed) {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.accordion-docs .accordion-button::after {
+  width: 1rem;
+  height: 1rem;
+}
+
+.accordion-docs .accordion-body {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.accordion-docs .accordion-body p {
+  margin: 0 0 0.75rem 0;
+}
+
+.accordion-docs .accordion-body p:last-child {
+  margin-bottom: 0;
+}
+
+.accordion-docs .accordion-body .mb-2 { margin-bottom: 0.5rem; }
+.accordion-docs .accordion-body .mt-3 { margin-top: 1rem; }
+
+/* ---- Code blocks ---- */
+.code-block {
+  position: relative;
+  background: #1e293b;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.code-block:last-child {
+  margin-bottom: 0;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+
+.code-block pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.btn-copy {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition), border-color var(--transition);
+}
+
+.btn-copy:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-copy--done {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+/* ---- Footer ---- */
+.site-footer {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  padding: 1.25rem 0;
+  margin-top: auto;
+}
+
+.site-footer p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.site-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ---- DataTables overrides ---- */
+.dataTables_wrapper {
+  padding: 0;
+}
+
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter {
+  padding: 1rem 1.1rem;
+  padding-bottom: 0.75rem;
+}
+
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_filter label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.dataTables_wrapper .dataTables_length select {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  padding: 0.3rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin: 0 0.25rem;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.dataTables_wrapper .dataTables_filter input {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  padding: 0.45rem 0.75rem;
+  margin-left: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.dataTables_wrapper .dataTables_filter input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.dataTables_wrapper .dataTables_info {
+  padding: 0.75rem 1.1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.dataTables_wrapper .dataTables_paginate {
+  padding: 0.75rem 1.1rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  padding: 0.4rem 0.75rem;
+  margin: 0 0.15rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  transition: all var(--transition);
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive: stack header nav on small screens */
+@media (max-width: 576px) {
+  .header-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .site-title {
+    font-size: 1.3rem;
+  }
+
+  .section-header h2,
+  .section h2 {
+    font-size: 1.2rem;
+  }
+
+  .services-table th,
+  .services-table td {
+    padding: 0.7rem 0.9rem;
+    font-size: 0.875rem;
+  }
+
+  .code-block pre {
+    padding: 0.9rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  .btn-copy {
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+  }
+}

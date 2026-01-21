@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aprsd-service-registry"
-dynamic = ["version"]
+version = "1.5.0"
 description = "Amateur radio APRS Services registry"
 readme = { file = "README.rst", content-type = "text/x-rst" }
 license = { text = "Apache-2.0" }
@@ -29,6 +29,7 @@ dependencies = [
     "jinja2",
     "loguru",
     "oslo.config",
+    "typing-inspect",
     "uvicorn",
     "wrapt",
 ]
@@ -50,11 +51,8 @@ dev = [
 [project.scripts]
 aprs-service-registry = "aprs_service_registry.cli:main"
 
-[project.entry-points."oslo.config.opts"]
-aprs_service_registry.conf = "aprs_service_registry.conf.common:list_opts"
-
-[tool.setuptools.dynamic]
-version = { attr = "aprs_service_registry._version:__version__" }
-
 [tool.setuptools.packages.find]
-packages = ["aprs_service_registry"]
+include = ["aprs_service_registry*"]
+
+[tool.setuptools.package-data]
+aprs_service_registry = ["web/static/*", "web/templates/*"]

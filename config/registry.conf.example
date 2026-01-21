@@ -1,0 +1,12 @@
+[registry]
+# Listen address (default: 0.0.0.0)
+web_ip = 0.0.0.0
+# Port (default: 80 in container, mapped to 8001 on host)
+web_port = 80
+# Persist registered services to disk (default: true)
+enable_save = true
+# Directory for save file (default: ~/.config/aprs_service_registry/)
+# In Docker, this maps to /home/app/.config/aprs_service_registry/
+save_location = /home/app/.config/aprs_service_registry/
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
+log_level = INFO

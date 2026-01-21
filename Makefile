@@ -52,9 +52,12 @@ help:	# Help for the Makefile
 	@egrep -h '\s##\s' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 dev: REQUIREMENTS_TXT = requirements.txt dev-requirements.txt
-dev: venv  ## Create a python virtual environment for development of aprsd
+dev: venv  ## Create a python virtual environment for development
 
-run: venv  ## Create a virtual environment for running aprsd commands
+run: venv  ## Create a virtual environment for running the app
+
+server: run  ## Start the APRS Service Registry web server
+	$(VENV)/aprs-service-registry server
 
 docs: dev
 	cp README.rst docs/readme.rst
