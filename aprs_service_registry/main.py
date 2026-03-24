@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi_utils.tasks import repeat_every
+from datetime import datetime, timezone
 import json
 import logging
 from oslo_config import cfg
@@ -28,6 +29,7 @@ templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
 class registryRequest(BaseModel):
     """Request to register a service with the registry."""
+
     callsign: str
     description: str
     service_website: str
@@ -74,8 +76,7 @@ async def get(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request,
-                 "services": services}
+        context={"request": request, "services": services},
     )
 
 
@@ -95,8 +96,32 @@ async def registry(request: registryRequest):
     request_upper = registryRequest(**request_dict)
     services.add(callsign_upper, request_upper)
     for service in services:
-        LOG.info(f"{service}: {services[service].description} - {services[service].service_website}")
+        LOG.info(
+            f"{service}: {services[service].description} - {services[service].service_website}"
+        )
     return json.dumps({"status": "ok"})
+
+
+@app.get("/api/v1/registry", response_class=JSONResponse)
+async def get_all_services():
+    """Get all registered services."""
+    services = APRSServices()
+    all_services = services.get_all()
+
+    # Convert Pydantic models to dicts
+    services_list = []
+    for callsign, service in all_services.items():
+        try:
+            services_list.append(service.model_dump())
+        except AttributeError:
+            services_list.append(service.dict())
+
+    return {
+        "count": len(services_list),
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "services": services_list,
+    }
+
 
 @app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
 async def registry_delete(callsign: str):
@@ -106,6 +131,7 @@ async def registry_delete(callsign: str):
     services.remove(callsign.upper())
     return json.dumps({"status": "ok"})
 
+
 async def ws_process_balls(msg):
     time.sleep(2)
     return {"call": "balls", "data": msg["message"]}
@@ -113,7 +139,7 @@ async def ws_process_balls(msg):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    LOG.error('CONNECTING...')
+    LOG.error("CONNECTING...")
     await websocket.accept()
     while True:
         try:
