@@ -1,7 +1,7 @@
 import json
 import logging
 import threading
-import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -11,7 +11,6 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi_utils.tasks import repeat_every
 from oslo_config import cfg
 from pydantic import BaseModel
 
@@ -22,7 +21,32 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 _WEB_DIR = Path(__file__).resolve().parent / "web"
-app = FastAPI()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan context manager for startup/shutdown."""
+    from aprs_service_registry.health_checker import (
+        setup_scheduler,
+        start_scheduler,
+        stop_scheduler,
+    )
+
+    # Startup: Load services from disk
+    APRSServices().load()
+
+    # Set up health check scheduler
+    setup_scheduler()
+    start_scheduler()
+
+    yield
+
+    # Shutdown: Stop scheduler and save services
+    stop_scheduler()
+    APRSServices().save()
+
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
@@ -63,13 +87,6 @@ class APRSServices(objectstore.ObjectStoreMixin):
     def remove(self, callsign):
         if callsign in self.data:
             del self.data[callsign]
-
-
-@app.on_event("startup")
-@repeat_every(seconds=60)
-def save_services(*args, **kwargs):
-    APRSServices().save()
-    print(time.time())
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

@@ -3,9 +3,10 @@
 import logging
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import wrapt
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from oslo_config import cfg
 
 from aprs_service_registry import objectstore
@@ -203,3 +204,70 @@ def get_checkable_services() -> list[str]:
             checkable.append(callsign)
 
     return checkable
+
+
+# Global scheduler instance
+_scheduler: AsyncIOScheduler | None = None
+
+
+def setup_scheduler() -> AsyncIOScheduler | None:
+    """Set up the health check scheduler.
+
+    Returns:
+        The scheduler instance, or None if health checks are disabled.
+    """
+    global _scheduler
+
+    if not CONF.registry.health_check_enabled:
+        LOG.info("Health checks disabled in config")
+        return None
+
+    checkable = get_checkable_services()
+    if not checkable:
+        LOG.info("No checkable services found, skipping scheduler setup")
+        return None
+
+    interval = calculate_stagger_interval(len(checkable))
+    LOG.info(
+        f"Setting up health check scheduler: {len(checkable)} services, "
+        f"{interval}s interval"
+    )
+
+    _scheduler = AsyncIOScheduler()
+
+    # Schedule each service with a staggered start time
+    for i, callsign in enumerate(checkable):
+        # Initial delay to stagger the first run
+        initial_delay = i * interval
+
+        _scheduler.add_job(
+            check_service,
+            "interval",
+            seconds=SECONDS_PER_HOUR,  # Run hourly
+            args=[callsign],
+            id=f"health_check_{callsign}",
+            name=f"Health check for {callsign}",
+            next_run_time=datetime.now() + timedelta(seconds=initial_delay),
+        )
+        LOG.debug(
+            f"Scheduled health check for {callsign} (initial delay: {initial_delay}s)"
+        )
+
+    return _scheduler
+
+
+def start_scheduler() -> None:
+    """Start the health check scheduler."""
+    global _scheduler
+    if _scheduler:
+        _scheduler.start()
+        LOG.info("Health check scheduler started")
+
+
+def stop_scheduler() -> None:
+    """Stop the health check scheduler."""
+    global _scheduler
+    if _scheduler:
+        _scheduler.shutdown()
+        _scheduler = None
+        LOG.info("Health check scheduler stopped")
