@@ -123,8 +123,13 @@ def _initialize_aprsd() -> bool:
             aprsd_config_path = CONF.registry.aprsd_config_path
             LOG.info(f"Loading APRSD config from {aprsd_config_path}")
 
-            # APRSD uses oslo.config, we need to load its config
-            aprsd_conf.conf.register_opts()
+            # Register APRSD's oslo.config options
+            # These are needed for the APRS-IS client to work
+            aprsd_conf.common.register_opts(cfg.CONF)
+            aprsd_conf.client.register_opts(cfg.CONF)
+
+            # Re-parse config to pick up APRSD options from aprsd.conf
+            # We need to include both our config and the APRSD config
             cfg.CONF(
                 args=[],
                 default_config_files=[aprsd_config_path],
@@ -132,7 +137,7 @@ def _initialize_aprsd() -> bool:
 
             # Initialize the APRSD client (singleton)
             client = APRSDClient()
-            if client.is_connected:
+            if client.connected:
                 LOG.info("APRSD client connected to APRS-IS")
                 _aprsd_initialized = True
                 return True
