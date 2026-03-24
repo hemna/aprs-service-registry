@@ -15,6 +15,7 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 MAX_RESULTS_PER_SERVICE = 3
+SECONDS_PER_HOUR = 3600
 
 
 @dataclass
@@ -160,3 +161,45 @@ def check_service(callsign: str) -> None:
 
     store.add_result(callsign, result)
     store.save()
+
+
+def calculate_stagger_interval(num_services: int) -> int | None:
+    """Calculate interval between health checks to spread them over an hour.
+
+    Args:
+        num_services: Number of services to check
+
+    Returns:
+        Interval in seconds, or None if no services to check
+    """
+    if num_services <= 0:
+        return None
+    return SECONDS_PER_HOUR // num_services
+
+
+def get_checkable_services() -> list[str]:
+    """Get list of service callsigns that should be health checked.
+
+    Returns services that:
+    - Have a health_check_command set
+    - Are not deleted (status != "deleted")
+    """
+    from aprs_service_registry.main import APRSServices
+
+    services = APRSServices()
+    checkable = []
+
+    for callsign in services:
+        service = services[callsign]
+        try:
+            service_dict = service.model_dump()
+        except AttributeError:
+            service_dict = service.dict()
+
+        status = service_dict.get("status", "active")
+        health_check_command = service_dict.get("health_check_command")
+
+        if status != "deleted" and health_check_command:
+            checkable.append(callsign)
+
+    return checkable

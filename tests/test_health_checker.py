@@ -260,3 +260,80 @@ class TestCheckService:
 
         store = HealthCheckStore()
         assert store.get_last_result("NOCOMMAND") is None
+
+
+class TestScheduler:
+    """Tests for health check scheduling."""
+
+    def setup_method(self):
+        """Clear stores before each test."""
+        from aprs_service_registry.main import APRSServices
+
+        APRSServices().data = {}
+
+    def test_calculate_stagger_interval(self):
+        """Stagger interval calculated correctly."""
+        from aprs_service_registry.health_checker import calculate_stagger_interval
+
+        # 10 services = 360 second interval (6 minutes)
+        assert calculate_stagger_interval(10) == 360
+
+        # 15 services = 240 second interval (4 minutes)
+        assert calculate_stagger_interval(15) == 240
+
+        # 1 service = 3600 seconds (full hour)
+        assert calculate_stagger_interval(1) == 3600
+
+    def test_calculate_stagger_interval_zero_services(self):
+        """Returns None if no checkable services."""
+        from aprs_service_registry.health_checker import calculate_stagger_interval
+
+        assert calculate_stagger_interval(0) is None
+
+    def test_get_checkable_services(self):
+        """Only returns services with health_check_command and not deleted."""
+        from aprs_service_registry.health_checker import get_checkable_services
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.data = {}
+
+        # Checkable: has command, not deleted
+        services.add(
+            "CHECKABLE",
+            registryRequest(
+                callsign="CHECKABLE",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command="ping",
+            ),
+        )
+
+        # Not checkable: no command
+        services.add(
+            "NOCOMMAND",
+            registryRequest(
+                callsign="NOCOMMAND",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+            ),
+        )
+
+        # Not checkable: deleted
+        services.add(
+            "DELETED",
+            registryRequest(
+                callsign="DELETED",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="deleted",
+                health_check_command="ping",
+            ),
+        )
+
+        checkable = get_checkable_services()
+        assert len(checkable) == 1
+        assert checkable[0] == "CHECKABLE"
