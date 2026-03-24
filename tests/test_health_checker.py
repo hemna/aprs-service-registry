@@ -54,7 +54,8 @@ class TestHealthCheckStore:
     def test_add_result(self):
         """Can add a health check result for a service."""
         from aprs_service_registry.health_checker import (
-            HealthCheckResult, HealthCheckStore,
+            HealthCheckResult,
+            HealthCheckStore,
         )
 
         store = HealthCheckStore()
@@ -75,7 +76,8 @@ class TestHealthCheckStore:
     def test_keeps_only_last_3_results(self):
         """Store keeps only the last 3 results per service."""
         from aprs_service_registry.health_checker import (
-            HealthCheckResult, HealthCheckStore,
+            HealthCheckResult,
+            HealthCheckStore,
         )
 
         store = HealthCheckStore()
@@ -100,7 +102,8 @@ class TestHealthCheckStore:
     def test_get_last_result(self):
         """Can get the most recent result for a service."""
         from aprs_service_registry.health_checker import (
-            HealthCheckResult, HealthCheckStore,
+            HealthCheckResult,
+            HealthCheckStore,
         )
 
         store = HealthCheckStore()
@@ -140,7 +143,8 @@ class TestCheckService:
     def test_check_service_success(self, mock_send):
         """Successful health check records success result."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore, check_service,
+            HealthCheckStore,
+            check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -175,7 +179,8 @@ class TestCheckService:
     def test_check_service_timeout(self, mock_send):
         """Timeout records failure result."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore, check_service,
+            HealthCheckStore,
+            check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -205,7 +210,8 @@ class TestCheckService:
     def test_check_service_skips_deleted(self):
         """Deleted services are skipped."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore, check_service,
+            HealthCheckStore,
+            check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -228,10 +234,12 @@ class TestCheckService:
         store = HealthCheckStore()
         assert store.get_last_result("DELETED") is None
 
-    def test_check_service_skips_no_command(self):
-        """Services without health_check_command are skipped."""
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_defaults_to_ping(self, mock_send):
+        """Services without health_check_command default to 'ping'."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore, check_service,
+            HealthCheckStore,
+            check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -247,10 +255,19 @@ class TestCheckService:
             ),
         )
 
+        # Mock successful response
+        mock_send.return_value = ("Pong!", 500)
+
         check_service("NOCOMMAND")
 
+        # Verify 'ping' was used as the command
+        mock_send.assert_called_once_with("NOCOMMAND", "ping", 60)
+
+        # Verify result was stored
         store = HealthCheckStore()
-        assert store.get_last_result("NOCOMMAND") is None
+        result = store.get_last_result("NOCOMMAND")
+        assert result is not None
+        assert result.success is True
 
 
 class TestScheduler:
@@ -288,14 +305,14 @@ class TestScheduler:
         assert calculate_stagger_interval(0) is None
 
     def test_get_checkable_services(self):
-        """Only returns services with health_check_command and not deleted."""
+        """Returns all non-deleted services (they all get health checked)."""
         from aprs_service_registry.health_checker import get_checkable_services
         from aprs_service_registry.main import APRSServices, registryRequest
 
         services = APRSServices()
         services.data = {}
 
-        # Checkable: has command, not deleted
+        # Checkable: has custom command, not deleted
         services.add(
             "CHECKABLE",
             registryRequest(
@@ -307,7 +324,7 @@ class TestScheduler:
             ),
         )
 
-        # Not checkable: no command
+        # Also checkable: no command (will default to 'ping')
         services.add(
             "NOCOMMAND",
             registryRequest(
@@ -332,8 +349,10 @@ class TestScheduler:
         )
 
         checkable = get_checkable_services()
-        assert len(checkable) == 1
-        assert checkable[0] == "CHECKABLE"
+        assert len(checkable) == 2
+        assert "CHECKABLE" in checkable
+        assert "NOCOMMAND" in checkable
+        assert "DELETED" not in checkable
 
 
 class TestSendAndWaitForResponse:

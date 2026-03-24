@@ -372,10 +372,8 @@ def check_service(callsign: str) -> None:
         return
 
     # Skip services without health_check_command
-    health_check_command = service_dict.get("health_check_command")
-    if not health_check_command:
-        LOG.debug(f"Skipping health check for {callsign}: no health_check_command")
-        return
+    # Get health check command, defaulting to 'ping'
+    health_check_command = service_dict.get("health_check_command") or "ping"
 
     LOG.info(f"Running health check for {callsign}: sending '{health_check_command}'")
 
@@ -438,9 +436,9 @@ def _service_to_dict(service) -> dict:
 def get_checkable_services() -> list[str]:
     """Get list of service callsigns that should be health checked.
 
-    Returns services that:
-    - Have a health_check_command set
-    - Are not deleted (status != "deleted")
+    Returns services that are not deleted (status != "deleted").
+    All active/down services are checked using their health_check_command
+    or 'ping' as the default.
     """
     from aprs_service_registry.main import APRSServices
 
@@ -452,9 +450,8 @@ def get_checkable_services() -> list[str]:
         service_dict = _service_to_dict(service)
 
         status = service_dict.get("status", "active")
-        health_check_command = service_dict.get("health_check_command")
 
-        if status != "deleted" and health_check_command:
+        if status != "deleted":
             checkable.append(callsign)
 
     return checkable
