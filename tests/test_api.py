@@ -534,3 +534,26 @@ class TestHealthCheckInResponse:
         assert "last_health_check" in service
         assert service["last_health_check"]["success"] is False
         assert service["last_health_check"]["error"] == "Timeout"
+
+    def test_list_services_includes_null_health_check_when_no_results(self):
+        """GET all services includes last_health_check=None when no health checks exist."""
+        services = APRSServices()
+        services.add(
+            "TESTNOHC",
+            registryRequest(
+                callsign="TESTNOHC",
+                description="Service with no health checks",
+                service_website="https://test.com",
+                software="test",
+            ),
+        )
+
+        response = client.get("/api/v1/registry")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Find our service in the list
+        service = next(s for s in data["services"] if s.get("callsign") == "TESTNOHC")
+
+        assert "last_health_check" in service
+        assert service["last_health_check"] is None

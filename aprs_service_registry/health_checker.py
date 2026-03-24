@@ -56,7 +56,11 @@ class HealthCheckStore(objectstore.ObjectStoreMixin):
 
     @wrapt.synchronized(lock)
     def add_result(self, callsign: str, result: HealthCheckResult):
-        """Add a health check result for a service, keeping only last 3."""
+        """Add a health check result for a service, keeping only last 3.
+
+        Note: This method does NOT persist to disk. Use add_and_persist_result
+        if you need automatic persistence.
+        """
         callsign_upper = callsign.upper()
         if callsign_upper not in self.data:
             self.data[callsign_upper] = []
@@ -66,6 +70,26 @@ class HealthCheckStore(objectstore.ObjectStoreMixin):
 
         # Keep only last 3
         self.data[callsign_upper] = self.data[callsign_upper][:MAX_RESULTS_PER_SERVICE]
+
+    @wrapt.synchronized(lock)
+    def add_and_persist_result(self, callsign: str, result: HealthCheckResult):
+        """Add a health check result and persist to disk.
+
+        This is the preferred method for recording health check results
+        as it ensures data is saved immediately.
+        """
+        callsign_upper = callsign.upper()
+        if callsign_upper not in self.data:
+            self.data[callsign_upper] = []
+
+        # Prepend new result (most recent first)
+        self.data[callsign_upper].insert(0, result)
+
+        # Keep only last 3
+        self.data[callsign_upper] = self.data[callsign_upper][:MAX_RESULTS_PER_SERVICE]
+
+        # Persist to disk
+        self.save()
 
     @wrapt.synchronized(lock)
     def get_results(self, callsign: str) -> list[HealthCheckResult]:
@@ -265,10 +289,7 @@ def check_service(callsign: str) -> None:
         return
 
     # Get service dict for status check
-    try:
-        service_dict = service.model_dump()
-    except AttributeError:
-        service_dict = service.dict()
+    service_dict = _service_to_dict(service)
 
     # Skip deleted services
     status = service_dict.get("status", "active")
@@ -312,8 +333,7 @@ def check_service(callsign: str) -> None:
         )
         LOG.warning(f"Health check for {callsign}: TIMEOUT")
 
-    store.add_result(callsign, result)
-    store.save()
+    store.add_and_persist_result(callsign, result)
 
 
 def calculate_stagger_interval(num_services: int) -> int | None:
@@ -330,6 +350,17 @@ def calculate_stagger_interval(num_services: int) -> int | None:
     return SECONDS_PER_HOUR // num_services
 
 
+def _service_to_dict(service) -> dict:
+    """Convert a service model to a dictionary.
+
+    Handles both Pydantic v1 (.dict()) and v2 (.model_dump()) APIs.
+    """
+    try:
+        return service.model_dump()
+    except AttributeError:
+        return service.dict()
+
+
 def get_checkable_services() -> list[str]:
     """Get list of service callsigns that should be health checked.
 
@@ -344,10 +375,7 @@ def get_checkable_services() -> list[str]:
 
     for callsign in services:
         service = services[callsign]
-        try:
-            service_dict = service.model_dump()
-        except AttributeError:
-            service_dict = service.dict()
+        service_dict = _service_to_dict(service)
 
         status = service_dict.get("status", "active")
         health_check_command = service_dict.get("health_check_command")

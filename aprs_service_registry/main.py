@@ -15,6 +15,9 @@ from oslo_config import cfg
 from pydantic import BaseModel
 
 from aprs_service_registry import conf, objectstore, utils  # noqa
+from aprs_service_registry.health_checker import (
+    HealthCheckStore, setup_scheduler, start_scheduler, stop_scheduler,
+)
 
 
 LOG = logging.getLogger(__name__)
@@ -23,13 +26,47 @@ CONF = cfg.CONF
 _WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
+def service_to_dict(service) -> dict:
+    """Convert a service model to a dictionary.
+
+    Handles both Pydantic v1 (.dict()) and v2 (.model_dump()) APIs.
+    Also sets default status for legacy services.
+    """
+    try:
+        data = service.model_dump()
+    except AttributeError:
+        data = service.dict()
+
+    # Default status for legacy services
+    if "status" not in data or data["status"] is None:
+        data["status"] = "active"
+
+    return data
+
+
+def attach_last_health_check(service_dict: dict, callsign: str, store) -> None:
+    """Attach last_health_check info to a service dictionary.
+
+    Args:
+        service_dict: The service dictionary to modify (in-place)
+        callsign: The service callsign
+        store: HealthCheckStore instance
+    """
+    last_result = store.get_last_result(callsign)
+    if last_result:
+        service_dict["last_health_check"] = {
+            "timestamp": last_result.timestamp.isoformat(),
+            "success": last_result.success,
+            "response_time_ms": last_result.response_time_ms,
+            "error": last_result.error,
+        }
+    else:
+        service_dict["last_health_check"] = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
-    from aprs_service_registry.health_checker import (
-        setup_scheduler, start_scheduler, stop_scheduler,
-    )
-
     # Startup: Load services from disk
     APRSServices().load()
 
@@ -89,8 +126,6 @@ class APRSServices(objectstore.ObjectStoreMixin):
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
-    from aprs_service_registry.health_checker import HealthCheckStore
-
     services = APRSServices()
     all_services = services.get_all()
     store = HealthCheckStore()
@@ -109,8 +144,7 @@ async def get(request: Request):
         if status in ("active", "down"):
             filtered_services[callsign] = service
             # Get health check result
-            last_result = store.get_last_result(callsign)
-            health_checks[callsign] = last_result
+            health_checks[callsign] = store.get_last_result(callsign)
 
     return templates.TemplateResponse(
         request=request,
@@ -152,8 +186,6 @@ async def get_all_services(
     include_all: bool = False,
 ):
     """Get all registered services, filtered by status."""
-    from aprs_service_registry.health_checker import HealthCheckStore
-
     services = APRSServices()
     all_services = services.get_all()
     store = HealthCheckStore()
@@ -168,29 +200,10 @@ async def get_all_services(
     # Convert Pydantic models to dicts and filter by status
     services_list = []
     for callsign, service in all_services.items():
-        # Handle legacy services without status field
-        try:
-            service_dict = service.model_dump()
-        except AttributeError:
-            service_dict = service.dict()
-
-        # Default status for legacy services
-        if "status" not in service_dict or service_dict["status"] is None:
-            service_dict["status"] = "active"
+        service_dict = service_to_dict(service)
 
         if service_dict["status"] in allowed_statuses:
-            # Add health check info
-            last_result = store.get_last_result(callsign)
-            if last_result:
-                service_dict["last_health_check"] = {
-                    "timestamp": last_result.timestamp.isoformat(),
-                    "success": last_result.success,
-                    "response_time_ms": last_result.response_time_ms,
-                    "error": last_result.error,
-                }
-            else:
-                service_dict["last_health_check"] = None
-
+            attach_last_health_check(service_dict, callsign, store)
             services_list.append(service_dict)
 
     return {
@@ -203,31 +216,13 @@ async def get_all_services(
 @app.get("/api/v1/registry/{callsign}", response_class=JSONResponse)
 async def get_service(callsign: str):
     """Get a single service by callsign."""
-    from aprs_service_registry.health_checker import HealthCheckStore
-
     services = APRSServices()
     callsign_upper = callsign.upper()
 
     try:
         service = services[callsign_upper]
-        try:
-            service_dict = service.model_dump()
-        except AttributeError:
-            service_dict = service.dict()
-
-        # Add health check info
-        store = HealthCheckStore()
-        last_result = store.get_last_result(callsign_upper)
-        if last_result:
-            service_dict["last_health_check"] = {
-                "timestamp": last_result.timestamp.isoformat(),
-                "success": last_result.success,
-                "response_time_ms": last_result.response_time_ms,
-                "error": last_result.error,
-            }
-        else:
-            service_dict["last_health_check"] = None
-
+        service_dict = service_to_dict(service)
+        attach_last_health_check(service_dict, callsign_upper, HealthCheckStore())
         return service_dict
     except KeyError:
         raise HTTPException(
@@ -244,12 +239,7 @@ async def registry_delete(callsign: str):
 
     try:
         service = services[callsign_upper]
-        # Update status to deleted
-        try:
-            service_dict = service.model_dump()
-        except AttributeError:
-            service_dict = service.dict()
-
+        service_dict = service_to_dict(service)
         service_dict["status"] = "deleted"
         updated_service = registryRequest(**service_dict)
         services.add(callsign_upper, updated_service)
