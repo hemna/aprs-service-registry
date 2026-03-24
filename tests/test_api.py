@@ -349,3 +349,65 @@ class TestSoftDelete:
         list_response = client.get("/api/v1/registry?include_deleted=true")
         callsigns = [s["callsign"] for s in list_response.json()["services"]]
         assert "TODELETE" in callsigns
+
+
+class TestHealthCheckCommand:
+    """Tests for health_check_command field."""
+
+    def setup_method(self):
+        """Clear services before each test."""
+        services = APRSServices()
+        services.data = {}
+
+    def test_register_service_without_health_check_command(self):
+        """Services default to no health_check_command."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+            },
+        )
+        assert response.status_code == 200
+
+        get_response = client.get("/api/v1/registry/TEST")
+        assert get_response.status_code == 200
+        assert get_response.json()["health_check_command"] is None
+
+    def test_register_service_with_health_check_command(self):
+        """Can register a service with health_check_command."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+                "health_check_command": "ping",
+            },
+        )
+        assert response.status_code == 200
+
+        get_response = client.get("/api/v1/registry/TEST")
+        assert get_response.json()["health_check_command"] == "ping"
+
+    def test_health_check_command_in_list_response(self):
+        """health_check_command appears in list API response."""
+        services = APRSServices()
+        services.add(
+            "TEST",
+            registryRequest(
+                callsign="TEST",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command="help",
+            ),
+        )
+
+        response = client.get("/api/v1/registry")
+        assert response.status_code == 200
+        service = response.json()["services"][0]
+        assert service["health_check_command"] == "help"

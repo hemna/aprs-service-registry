@@ -36,6 +36,7 @@ class registryRequest(BaseModel):
     software: str
     callsign_owner: str | None = None
     status: Literal["active", "down", "deleted"] = "active"
+    health_check_command: str | None = None
 
 
 class APRSServices(objectstore.ObjectStoreMixin):
