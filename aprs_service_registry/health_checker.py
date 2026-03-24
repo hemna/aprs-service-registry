@@ -123,16 +123,76 @@ def _initialize_aprsd() -> bool:
             aprsd_config_path = CONF.registry.aprsd_config_path
             LOG.info(f"Loading APRSD config from {aprsd_config_path}")
 
+            # CRITICAL: Preserve our registry config values before re-parsing
+            # because cfg.CONF() will reset all values to defaults from the
+            # new config file, losing our registry settings like save_location
+            preserved_registry_config = {
+                "enable_save": CONF.registry.enable_save,
+                "save_location": CONF.registry.save_location,
+                "trace_enabled": CONF.registry.trace_enabled,
+                "web_ip": str(CONF.registry.web_ip),
+                "web_port": CONF.registry.web_port,
+                "log_level": CONF.registry.log_level,
+                "aprsd_config_path": CONF.registry.aprsd_config_path,
+                "health_check_enabled": CONF.registry.health_check_enabled,
+                "health_check_timeout": CONF.registry.health_check_timeout,
+            }
+            LOG.debug(f"Preserved registry config: {preserved_registry_config}")
+
             # Register APRSD's oslo.config options
             # These are needed for the APRS-IS client to work
             aprsd_conf.common.register_opts(cfg.CONF)
             aprsd_conf.client.register_opts(cfg.CONF)
 
             # Re-parse config to pick up APRSD options from aprsd.conf
-            # We need to include both our config and the APRSD config
             cfg.CONF(
                 args=[],
                 default_config_files=[aprsd_config_path],
+            )
+
+            # CRITICAL: Restore our registry config values after APRSD config
+            # parsing overwrote them with defaults
+            cfg.CONF.set_override(
+                "enable_save",
+                preserved_registry_config["enable_save"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "save_location",
+                preserved_registry_config["save_location"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "trace_enabled",
+                preserved_registry_config["trace_enabled"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "web_ip", preserved_registry_config["web_ip"], group="registry"
+            )
+            cfg.CONF.set_override(
+                "web_port", preserved_registry_config["web_port"], group="registry"
+            )
+            cfg.CONF.set_override(
+                "log_level", preserved_registry_config["log_level"], group="registry"
+            )
+            cfg.CONF.set_override(
+                "aprsd_config_path",
+                preserved_registry_config["aprsd_config_path"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "health_check_enabled",
+                preserved_registry_config["health_check_enabled"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "health_check_timeout",
+                preserved_registry_config["health_check_timeout"],
+                group="registry",
+            )
+            LOG.debug(
+                f"Restored registry config, save_location={CONF.registry.save_location}"
             )
 
             # Initialize the APRSD client (singleton)
