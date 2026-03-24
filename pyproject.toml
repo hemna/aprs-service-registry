@@ -32,6 +32,8 @@ dependencies = [
     "typing-inspect",
     "uvicorn",
     "wrapt",
+    "aprsd @ git+https://github.com/craigerl/aprsd.git",
+    "apscheduler>=3.10.0",
 ]
 
 [project.optional-dependencies]

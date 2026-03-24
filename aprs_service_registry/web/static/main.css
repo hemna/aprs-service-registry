@@ -501,6 +501,21 @@ main {
     color: #6c757d;
 }
 
+/* Health check status styling */
+.health-check-success {
+    color: #198754;
+    font-weight: 500;
+}
+
+.health-check-failure {
+    color: #dc3545;
+    font-weight: 500;
+}
+
+.health-check-none {
+    color: #6c757d;
+}
+
 /* Responsive: stack header nav on small screens */
 @media (max-width: 576px) {
   .header-inner {

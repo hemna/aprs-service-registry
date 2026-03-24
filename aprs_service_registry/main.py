@@ -1,7 +1,7 @@
 import json
 import logging
 import threading
-import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -11,18 +11,79 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi_utils.tasks import repeat_every
 from oslo_config import cfg
 from pydantic import BaseModel
 
 from aprs_service_registry import conf, objectstore, utils  # noqa
+from aprs_service_registry.health_checker import (
+    HealthCheckStore, setup_scheduler, start_scheduler, stop_scheduler,
+)
 
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 _WEB_DIR = Path(__file__).resolve().parent / "web"
-app = FastAPI()
+
+
+def service_to_dict(service) -> dict:
+    """Convert a service model to a dictionary.
+
+    Handles both Pydantic v1 (.dict()) and v2 (.model_dump()) APIs.
+    Also sets default status for legacy services.
+    """
+    try:
+        data = service.model_dump()
+    except AttributeError:
+        data = service.dict()
+
+    # Default status for legacy services
+    if "status" not in data or data["status"] is None:
+        data["status"] = "active"
+
+    return data
+
+
+def attach_last_health_check(service_dict: dict, callsign: str, store) -> None:
+    """Attach last_health_check info to a service dictionary.
+
+    Args:
+        service_dict: The service dictionary to modify (in-place)
+        callsign: The service callsign
+        store: HealthCheckStore instance
+    """
+    last_result = store.get_last_result(callsign)
+    if last_result:
+        service_dict["last_health_check"] = {
+            "timestamp": last_result.timestamp.isoformat(),
+            "success": last_result.success,
+            "response_time_ms": last_result.response_time_ms,
+            "error": last_result.error,
+        }
+    else:
+        service_dict["last_health_check"] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan context manager for startup/shutdown."""
+    # Startup: Load services and health check results from disk
+    APRSServices().load()
+    HealthCheckStore().load()
+
+    # Set up health check scheduler
+    setup_scheduler()
+    start_scheduler()
+
+    yield
+
+    # Shutdown: Stop scheduler and save data
+    stop_scheduler()
+    APRSServices().save()
+    HealthCheckStore().save()
+
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
@@ -36,6 +97,7 @@ class registryRequest(BaseModel):
     software: str
     callsign_owner: str | None = None
     status: Literal["active", "down", "deleted"] = "active"
+    health_check_command: str | None = None
 
 
 class APRSServices(objectstore.ObjectStoreMixin):
@@ -56,7 +118,22 @@ class APRSServices(objectstore.ObjectStoreMixin):
 
     @wrapt.synchronized(lock)
     def add(self, callsign, data: registryRequest):
+        """Add a service to the registry.
+
+        Note: This method does NOT persist to disk. Use add_and_persist
+        if you need automatic persistence.
+        """
         self.data[callsign] = data
+
+    @wrapt.synchronized(lock)
+    def add_and_persist(self, callsign, data: registryRequest):
+        """Add a service to the registry and persist to disk.
+
+        This is the preferred method for recording service changes
+        as it ensures data is saved immediately.
+        """
+        self.data[callsign] = data
+        self.save()
 
     @wrapt.synchronized(lock)
     def remove(self, callsign):
@@ -64,33 +141,34 @@ class APRSServices(objectstore.ObjectStoreMixin):
             del self.data[callsign]
 
 
-@app.on_event("startup")
-@repeat_every(seconds=60)
-def save_services(*args, **kwargs):
-    APRSServices().save()
-    print(time.time())
-
-
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
     services = APRSServices()
     all_services = services.get_all()
+    store = HealthCheckStore()
 
     # Filter for website: show active and down, hide deleted
+    # Also build health check info
     filtered_services = {}
+    health_checks = {}
+
     for callsign, service in all_services.items():
-        try:
-            status = service.status if hasattr(service, "status") else "active"
-        except AttributeError:
-            status = "active"
+        service_dict = service_to_dict(service)
+        status = service_dict["status"]
 
         if status in ("active", "down"):
             filtered_services[callsign] = service
+            # Get health check result
+            health_checks[callsign] = store.get_last_result(callsign)
 
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "services": filtered_services},
+        context={
+            "request": request,
+            "services": filtered_services,
+            "health_checks": health_checks,
+        },
     )
 
 
@@ -108,7 +186,7 @@ async def registry(request: registryRequest):
         request_dict = request.dict()
     request_dict["callsign"] = callsign_upper
     request_upper = registryRequest(**request_dict)
-    services.add(callsign_upper, request_upper)
+    services.add_and_persist(callsign_upper, request_upper)
     for service in services:
         LOG.info(
             f"{service}: {services[service].description} - {services[service].service_website}",
@@ -125,6 +203,7 @@ async def get_all_services(
     """Get all registered services, filtered by status."""
     services = APRSServices()
     all_services = services.get_all()
+    store = HealthCheckStore()
 
     # Determine which statuses to include
     allowed_statuses = {"active"}
@@ -136,17 +215,10 @@ async def get_all_services(
     # Convert Pydantic models to dicts and filter by status
     services_list = []
     for callsign, service in all_services.items():
-        # Handle legacy services without status field
-        try:
-            service_dict = service.model_dump()
-        except AttributeError:
-            service_dict = service.dict()
-
-        # Default status for legacy services
-        if "status" not in service_dict or service_dict["status"] is None:
-            service_dict["status"] = "active"
+        service_dict = service_to_dict(service)
 
         if service_dict["status"] in allowed_statuses:
+            attach_last_health_check(service_dict, callsign, store)
             services_list.append(service_dict)
 
     return {
@@ -164,10 +236,9 @@ async def get_service(callsign: str):
 
     try:
         service = services[callsign_upper]
-        try:
-            return service.model_dump()
-        except AttributeError:
-            return service.dict()
+        service_dict = service_to_dict(service)
+        attach_last_health_check(service_dict, callsign_upper, HealthCheckStore())
+        return service_dict
     except KeyError:
         raise HTTPException(
             status_code=404,
@@ -183,15 +254,10 @@ async def registry_delete(callsign: str):
 
     try:
         service = services[callsign_upper]
-        # Update status to deleted
-        try:
-            service_dict = service.model_dump()
-        except AttributeError:
-            service_dict = service.dict()
-
+        service_dict = service_to_dict(service)
         service_dict["status"] = "deleted"
         updated_service = registryRequest(**service_dict)
-        services.add(callsign_upper, updated_service)
+        services.add_and_persist(callsign_upper, updated_service)
 
         LOG.info(f"Soft deleted {callsign_upper} from the registry.")
         return {

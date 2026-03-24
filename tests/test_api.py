@@ -1,5 +1,7 @@
 """Tests for APRS Service Registry API endpoints."""
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 from aprs_service_registry.main import APRSServices, app, registryRequest
@@ -349,3 +351,209 @@ class TestSoftDelete:
         list_response = client.get("/api/v1/registry?include_deleted=true")
         callsigns = [s["callsign"] for s in list_response.json()["services"]]
         assert "TODELETE" in callsigns
+
+
+class TestHealthCheckCommand:
+    """Tests for health_check_command field."""
+
+    def setup_method(self):
+        """Clear services before each test."""
+        services = APRSServices()
+        services.data = {}
+
+    def test_register_service_without_health_check_command(self):
+        """Services default to no health_check_command."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+            },
+        )
+        assert response.status_code == 200
+
+        get_response = client.get("/api/v1/registry/TEST")
+        assert get_response.status_code == 200
+        assert get_response.json()["health_check_command"] is None
+
+    def test_register_service_with_health_check_command(self):
+        """Can register a service with health_check_command."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+                "health_check_command": "ping",
+            },
+        )
+        assert response.status_code == 200
+
+        get_response = client.get("/api/v1/registry/TEST")
+        assert get_response.json()["health_check_command"] == "ping"
+
+    def test_health_check_command_in_list_response(self):
+        """health_check_command appears in list API response."""
+        services = APRSServices()
+        services.add(
+            "TEST",
+            registryRequest(
+                callsign="TEST",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command="help",
+            ),
+        )
+
+        response = client.get("/api/v1/registry")
+        assert response.status_code == 200
+        service = response.json()["services"][0]
+        assert service["health_check_command"] == "help"
+
+
+class TestHealthCheckInResponse:
+    """Tests for health check info in API responses."""
+
+    def setup_method(self):
+        """Clear services and health checks before each test."""
+        from aprs_service_registry.health_checker import HealthCheckStore
+
+        services = APRSServices()
+        services.data = {}
+        HealthCheckStore().data = {}
+
+    def test_single_service_includes_last_health_check(self):
+        """GET single service includes last_health_check."""
+        from datetime import timezone
+
+        from aprs_service_registry.health_checker import (
+            HealthCheckResult, HealthCheckStore,
+        )
+
+        # Add service
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command="ping",
+            ),
+        )
+
+        # Add health check result
+        store = HealthCheckStore()
+        store.add_result(
+            "TESTCALL",
+            HealthCheckResult(
+                timestamp=datetime.now(timezone.utc),
+                success=True,
+                response_time_ms=1500,
+                response_text="Pong!",
+                error=None,
+            ),
+        )
+
+        response = client.get("/api/v1/registry/TESTCALL")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify health_check_command is in response
+        assert data["health_check_command"] == "ping"
+        # Verify last_health_check is in response
+        assert "last_health_check" in data
+        assert data["last_health_check"]["success"] is True
+        assert data["last_health_check"]["response_time_ms"] == 1500
+
+    def test_single_service_no_health_check(self):
+        """GET single service with no health checks returns null."""
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+            ),
+        )
+
+        response = client.get("/api/v1/registry/TESTCALL")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "last_health_check" in data
+        assert data["last_health_check"] is None
+
+    def test_list_services_includes_last_health_check(self):
+        """GET all services includes last_health_check for each."""
+        from datetime import timezone
+
+        from aprs_service_registry.health_checker import (
+            HealthCheckResult, HealthCheckStore,
+        )
+
+        services = APRSServices()
+        services.add(
+            "TEST1",
+            registryRequest(
+                callsign="TEST1",
+                description="Test 1",
+                service_website="https://test1.com",
+                software="test",
+                health_check_command="ping",
+            ),
+        )
+
+        store = HealthCheckStore()
+        store.add_result(
+            "TEST1",
+            HealthCheckResult(
+                timestamp=datetime.now(timezone.utc),
+                success=False,
+                response_time_ms=None,
+                response_text=None,
+                error="Timeout",
+            ),
+        )
+
+        response = client.get("/api/v1/registry")
+        assert response.status_code == 200
+        data = response.json()
+
+        service = data["services"][0]
+        # Verify health_check_command is in response
+        assert service["health_check_command"] == "ping"
+        # Verify last_health_check is in response
+        assert "last_health_check" in service
+        assert service["last_health_check"]["success"] is False
+        assert service["last_health_check"]["error"] == "Timeout"
+
+    def test_list_services_includes_null_health_check_when_no_results(self):
+        """GET all services includes last_health_check=None when no health checks exist."""
+        services = APRSServices()
+        services.add(
+            "TESTNOHC",
+            registryRequest(
+                callsign="TESTNOHC",
+                description="Service with no health checks",
+                service_website="https://test.com",
+                software="test",
+            ),
+        )
+
+        response = client.get("/api/v1/registry")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Find our service in the list
+        service = next(s for s in data["services"] if s.get("callsign") == "TESTNOHC")
+
+        assert "last_health_check" in service
+        assert service["last_health_check"] is None
