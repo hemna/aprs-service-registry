@@ -53,6 +53,21 @@ registry_opts = [
         choices=LOG_LEVELS.keys(),
         help="Log level for logging of events.",
     ),
+    cfg.StrOpt(
+        "aprsd_config_path",
+        default="/config/aprsd.conf",
+        help="Path to APRSD configuration file for health checks.",
+    ),
+    cfg.BoolOpt(
+        "health_check_enabled",
+        default=False,
+        help="Enable background health checks for services.",
+    ),
+    cfg.IntOpt(
+        "health_check_timeout",
+        default=60,
+        help="Seconds to wait for health check response.",
+    ),
 ]
 
 
