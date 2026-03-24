@@ -104,18 +104,37 @@ async def registry(request: registryRequest):
 
 
 @app.get("/api/v1/registry", response_class=JSONResponse)
-async def get_all_services():
-    """Get all registered services."""
+async def get_all_services(
+    include_down: bool = False,
+    include_deleted: bool = False,
+    include_all: bool = False,
+):
+    """Get all registered services, filtered by status."""
     services = APRSServices()
     all_services = services.get_all()
 
-    # Convert Pydantic models to dicts
+    # Determine which statuses to include
+    allowed_statuses = {"active"}
+    if include_down or include_all:
+        allowed_statuses.add("down")
+    if include_deleted or include_all:
+        allowed_statuses.add("deleted")
+
+    # Convert Pydantic models to dicts and filter by status
     services_list = []
     for callsign, service in all_services.items():
+        # Handle legacy services without status field
         try:
-            services_list.append(service.model_dump())
+            service_dict = service.model_dump()
         except AttributeError:
-            services_list.append(service.dict())
+            service_dict = service.dict()
+
+        # Default status for legacy services
+        if "status" not in service_dict or service_dict["status"] is None:
+            service_dict["status"] = "active"
+
+        if service_dict["status"] in allowed_statuses:
+            services_list.append(service_dict)
 
     return {
         "count": len(services_list),
