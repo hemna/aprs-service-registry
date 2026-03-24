@@ -109,7 +109,7 @@ The easiest way to run with Docker Compose:
    docker-compose down
 
 The ``docker-compose.yml`` includes:
-- Port mapping: host 8001 → container 80
+- Port mapping: host 8001 -> container 80
 - Config file mount: ``./config/registry.conf`` (optional, uses default if missing)
 - Data persistence: named volume ``aprs-registry-data``
 - Health checks and auto-restart
@@ -165,23 +165,101 @@ Services typically are automated responders, or services that provide informatio
 on a particular callsign over the APRS network.
 
 Common services include:
+
 - **SMSGTE** — A service that allows HAM Radio operators to send and receive SMS messages over the APRS network.
 
-How to Register a Service?
-==========================
+API Reference
+=============
 
-Use the **REST API** to register or update your service:
+The service provides a REST API for managing registered services. Full API documentation is available at http://localhost:8001/docs (when the server is running).
 
-- **API documentation:** http://localhost:8001/docs (when the server is running)
-- **POST** to ``/api/v1/registry`` with a JSON body:
+List All Services
+-----------------
 
-  .. code-block:: json
+**GET** ``/api/v1/registry``
 
-     {
+Returns all registered services with metadata.
+
+.. code-block:: bash
+
+   curl https://aprs.hemna.com/api/v1/registry
+
+Response:
+
+.. code-block:: json
+
+   {
+     "count": 2,
+     "timestamp": "2026-03-24T01:30:00Z",
+     "services": [
+       {
+         "callsign": "SMSGTE",
+         "description": "SMS Gateway Service",
+         "service_website": "https://smsgte.example.com",
+         "software": "aprsd 3.0",
+         "callsign_owner": "N0CALL"
+       }
+     ]
+   }
+
+Get a Single Service
+--------------------
+
+**GET** ``/api/v1/registry/{callsign}``
+
+Returns a single service by callsign (case-insensitive).
+
+.. code-block:: bash
+
+   curl https://aprs.hemna.com/api/v1/registry/SMSGTE
+
+Response (200 OK):
+
+.. code-block:: json
+
+   {
+     "callsign": "SMSGTE",
+     "description": "SMS Gateway Service",
+     "service_website": "https://smsgte.example.com",
+     "software": "aprsd 3.0",
+     "callsign_owner": "N0CALL"
+   }
+
+Response (404 Not Found):
+
+.. code-block:: json
+
+   {
+     "detail": "Service 'NOTFOUND' not found"
+   }
+
+Register or Update a Service
+----------------------------
+
+**POST** ``/api/v1/registry``
+
+Register a new service or update an existing one.
+
+.. code-block:: bash
+
+   curl -X POST https://aprs.hemna.com/api/v1/registry \
+     -H "Content-Type: application/json" \
+     -d '{
        "callsign": "YOURCALL",
        "description": "Description of your service",
        "service_website": "https://your-service.example.com",
        "software": "YourSoftware version 1.0"
-     }
+     }'
 
-The web UI at http://localhost:8001/ also has an interactive “How to Register” section with examples (cURL, APRSD config, etc.).
+Delete a Service
+----------------
+
+**DELETE** ``/api/v1/registry/{callsign}``
+
+Remove a service from the registry.
+
+.. code-block:: bash
+
+   curl -X DELETE https://aprs.hemna.com/api/v1/registry/YOURCALL
+
+The web UI at http://localhost:8001/ also has an interactive "How to Register" section with examples (cURL, APRSD config, etc.).
