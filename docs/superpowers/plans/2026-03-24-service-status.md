@@ -174,7 +174,7 @@ class TestStatusFiltering:
         """Set up test services with different statuses."""
         services = APRSServices()
         services.data = {}
-        
+
         # Add services with different statuses
         services.add("ACTIVE1", registryRequest(
             callsign="ACTIVE1",
@@ -210,7 +210,7 @@ class TestStatusFiltering:
         response = client.get("/api/v1/registry")
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["count"] == 2
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
@@ -223,7 +223,7 @@ class TestStatusFiltering:
         response = client.get("/api/v1/registry?include_down=true")
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["count"] == 3
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
@@ -235,7 +235,7 @@ class TestStatusFiltering:
         response = client.get("/api/v1/registry?include_deleted=true")
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["count"] == 3
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
@@ -247,7 +247,7 @@ class TestStatusFiltering:
         response = client.get("/api/v1/registry?include_all=true")
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["count"] == 4
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
@@ -260,7 +260,7 @@ class TestStatusFiltering:
         response = client.get("/api/v1/registry?include_down=true&include_deleted=true")
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["count"] == 4
 ```
 
@@ -300,11 +300,11 @@ async def get_all_services(
             service_dict = service.model_dump()
         except AttributeError:
             service_dict = service.dict()
-        
+
         # Default status for legacy services
         if "status" not in service_dict or service_dict["status"] is None:
             service_dict["status"] = "active"
-        
+
         if service_dict["status"] in allowed_statuses:
             services_list.append(service_dict)
 
@@ -409,7 +409,7 @@ async def registry_delete(callsign: str):
     """Soft delete a service (set status to deleted)."""
     services = APRSServices()
     callsign_upper = callsign.upper()
-    
+
     try:
         service = services[callsign_upper]
         # Update status to deleted
@@ -417,11 +417,11 @@ async def registry_delete(callsign: str):
             service_dict = service.model_dump()
         except AttributeError:
             service_dict = service.dict()
-        
+
         service_dict["status"] = "deleted"
         updated_service = registryRequest(**service_dict)
         services.add(callsign_upper, updated_service)
-        
+
         LOG.info(f"Soft deleted {callsign_upper} from the registry.")
         return {"status": "ok", "message": f"Service '{callsign_upper}' marked as deleted"}
     except KeyError:
@@ -462,7 +462,7 @@ The website should show `active` + `down` services (not `deleted`). Update the `
 async def get(request: Request):
     services = APRSServices()
     all_services = services.get_all()
-    
+
     # Filter for website: show active and down, hide deleted
     filtered_services = {}
     for callsign, service in all_services.items():
@@ -470,10 +470,10 @@ async def get(request: Request):
             status = service.status if hasattr(service, 'status') else "active"
         except AttributeError:
             status = "active"
-        
+
         if status in ("active", "down"):
             filtered_services[callsign] = service
-    
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -565,7 +565,7 @@ Start server: `make server` or `aprs-service-registry server`
      -H "Content-Type: application/json" \
      -d '{"callsign": "TESTDELETED", "description": "Deleted service", "service_website": "https://test.com", "software": "test", "status": "deleted"}'
    ```
-   
+
 5. Verify TESTDELETED does not appear on the website
 
 - [ ] **Step 5: Commit**
