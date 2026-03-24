@@ -118,7 +118,22 @@ class APRSServices(objectstore.ObjectStoreMixin):
 
     @wrapt.synchronized(lock)
     def add(self, callsign, data: registryRequest):
+        """Add a service to the registry.
+
+        Note: This method does NOT persist to disk. Use add_and_persist
+        if you need automatic persistence.
+        """
         self.data[callsign] = data
+
+    @wrapt.synchronized(lock)
+    def add_and_persist(self, callsign, data: registryRequest):
+        """Add a service to the registry and persist to disk.
+
+        This is the preferred method for recording service changes
+        as it ensures data is saved immediately.
+        """
+        self.data[callsign] = data
+        self.save()
 
     @wrapt.synchronized(lock)
     def remove(self, callsign):
@@ -138,10 +153,8 @@ async def get(request: Request):
     health_checks = {}
 
     for callsign, service in all_services.items():
-        try:
-            status = service.status if hasattr(service, "status") else "active"
-        except AttributeError:
-            status = "active"
+        service_dict = service_to_dict(service)
+        status = service_dict["status"]
 
         if status in ("active", "down"):
             filtered_services[callsign] = service
@@ -173,7 +186,7 @@ async def registry(request: registryRequest):
         request_dict = request.dict()
     request_dict["callsign"] = callsign_upper
     request_upper = registryRequest(**request_dict)
-    services.add(callsign_upper, request_upper)
+    services.add_and_persist(callsign_upper, request_upper)
     for service in services:
         LOG.info(
             f"{service}: {services[service].description} - {services[service].service_website}",
@@ -244,7 +257,7 @@ async def registry_delete(callsign: str):
         service_dict = service_to_dict(service)
         service_dict["status"] = "deleted"
         updated_service = registryRequest(**service_dict)
-        services.add(callsign_upper, updated_service)
+        services.add_and_persist(callsign_upper, updated_service)
 
         LOG.info(f"Soft deleted {callsign_upper} from the registry.")
         return {

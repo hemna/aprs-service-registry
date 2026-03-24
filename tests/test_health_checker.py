@@ -258,9 +258,11 @@ class TestScheduler:
 
     def setup_method(self):
         """Clear stores before each test."""
+        from aprs_service_registry.health_checker import HealthCheckStore
         from aprs_service_registry.main import APRSServices
 
         APRSServices().data = {}
+        HealthCheckStore().data = {}
 
     def test_calculate_stagger_interval(self):
         """Stagger interval calculated correctly."""

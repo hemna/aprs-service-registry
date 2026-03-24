@@ -427,7 +427,7 @@ def setup_scheduler() -> AsyncIOScheduler | None:
             args=[callsign],
             id=f"health_check_{callsign}",
             name=f"Health check for {callsign}",
-            next_run_time=datetime.now() + timedelta(seconds=initial_delay),
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=initial_delay),
         )
         LOG.debug(
             f"Scheduled health check for {callsign} (initial delay: {initial_delay}s)",
