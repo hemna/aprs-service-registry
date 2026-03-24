@@ -300,4 +300,46 @@ Include the ``status`` field when registering or updating a service:
 
 ``DELETE /api/v1/registry/{callsign}`` sets the service status to ``deleted`` rather than removing it permanently. The service can still be fetched by callsign and will appear with ``?include_deleted=true``.
 
+Health Checks
+-------------
+
+The registry can automatically check if services are responding on the APRS network.
+
+**Note:** Health check functionality is currently a placeholder. The actual APRSD integration for sending messages and receiving responses will be implemented in a future update.
+
+**Enabling health checks:**
+
+1. Enable health checks in your registry configuration:
+
+.. code-block:: ini
+
+   # registry.conf
+   [registry]
+   health_check_enabled = true
+   health_check_timeout = 60
+
+**Registering a service with health check:**
+
+Include the ``health_check_command`` field when registering:
+
+.. code-block:: bash
+
+   curl -X POST https://aprs.hemna.com/api/v1/registry \
+     -H "Content-Type: application/json" \
+     -d '{"callsign": "MYSERVICE", "description": "...", "service_website": "...", "software": "...", "health_check_command": "ping"}'
+
+The ``health_check_command`` is the message sent to the service. Common values:
+
+- ``ping`` — For services that respond to ping
+- ``help`` — For services that respond to help requests
+- ``?`` — For services that respond to queries
+
+**Health check results:**
+
+Results appear in the API responses and on the website:
+
+- ✓ with response time for successful checks
+- ✗ with error message for failed checks
+- — for services without health checks configured
+
 The web UI at http://localhost:8001/ also has an interactive "How to Register" section with examples (cURL, APRSD config, etc.).
