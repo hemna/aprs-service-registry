@@ -1,7 +1,7 @@
 # GET Services API Design
 
-**Date:** 2026-03-23  
-**Status:** Approved  
+**Date:** 2026-03-23
+**Status:** Approved
 **Author:** Assistant
 
 ## Summary

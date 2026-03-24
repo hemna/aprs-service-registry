@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from aprs_service_registry.main import app, APRSServices, registryRequest
+from aprs_service_registry.main import APRSServices, app, registryRequest
 
 
 client = TestClient(app)

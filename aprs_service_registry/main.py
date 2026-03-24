@@ -1,21 +1,20 @@
+import json
+import logging
+import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, Request, Response, HTTPException
+import wrapt
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi_utils.tasks import repeat_every
-from datetime import datetime, timezone
-import json
-import logging
 from oslo_config import cfg
 from pydantic import BaseModel
-import time
-import threading
-import wrapt
 
-from aprs_service_registry import conf, utils  # noqa
-from aprs_service_registry import objectstore
+from aprs_service_registry import conf, objectstore, utils  # noqa
 
 
 LOG = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ async def registry(request: registryRequest):
     services.add(callsign_upper, request_upper)
     for service in services:
         LOG.info(
-            f"{service}: {services[service].description} - {services[service].service_website}"
+            f"{service}: {services[service].description} - {services[service].service_website}",
         )
     return json.dumps({"status": "ok"})
 
@@ -137,7 +136,7 @@ async def get_service(callsign: str):
             return service.dict()
     except KeyError:
         raise HTTPException(
-            status_code=404, detail=f"Service '{callsign_upper}' not found"
+            status_code=404, detail=f"Service '{callsign_upper}' not found",
         )
 
 

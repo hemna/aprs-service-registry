@@ -51,7 +51,7 @@ class TestGetAllServices:
     def test_get_all_services_empty(self):
         """Returns empty list with count 0 when no services registered."""
         response = client.get("/api/v1/registry")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["count"] == 0
@@ -76,13 +76,13 @@ class TestGetAllServices:
         ))
 
         response = client.get("/api/v1/registry")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["count"] == 2
         assert len(data["services"]) == 2
         assert "timestamp" in data
-        
+
         # Verify service data
         callsigns = [s["callsign"] for s in data["services"]]
         assert "TEST1" in callsigns
@@ -126,7 +126,7 @@ async def get_all_services():
     """Get all registered services."""
     services = APRSServices()
     all_services = services.get_all()
-    
+
     # Convert Pydantic models to dicts
     services_list = []
     for callsign, service in all_services.items():
@@ -134,7 +134,7 @@ async def get_all_services():
             services_list.append(service.model_dump())
         except AttributeError:
             services_list.append(service.dict())
-    
+
     return {
         "count": len(services_list),
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -187,7 +187,7 @@ class TestGetSingleService:
     def test_get_service_found(self):
         """Returns service data when callsign exists."""
         response = client.get("/api/v1/registry/TESTCALL")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["callsign"] == "TESTCALL"
@@ -199,7 +199,7 @@ class TestGetSingleService:
     def test_get_service_case_insensitive(self):
         """Callsign lookup is case-insensitive."""
         response = client.get("/api/v1/registry/testcall")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["callsign"] == "TESTCALL"
@@ -207,7 +207,7 @@ class TestGetSingleService:
     def test_get_service_not_found(self):
         """Returns 404 when callsign doesn't exist."""
         response = client.get("/api/v1/registry/NOTEXIST")
-        
+
         assert response.status_code == 404
         data = response.json()
         assert "detail" in data
@@ -251,7 +251,7 @@ async def get_service(callsign: str):
     """Get a single service by callsign."""
     services = APRSServices()
     callsign_upper = callsign.upper()
-    
+
     try:
         service = services[callsign_upper]
         try:

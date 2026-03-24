@@ -1,12 +1,13 @@
 import logging
+
+import click
 from oslo_config import cfg
 from uvicorn import Config, Server
 
-import click
-
 import aprs_service_registry
-from aprs_service_registry import conf, cli_helper, log
+from aprs_service_registry import cli_helper, log
 from aprs_service_registry import main as registry_main
+
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 

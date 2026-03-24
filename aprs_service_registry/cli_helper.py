@@ -1,8 +1,9 @@
-import click
-from functools import update_wrapper
 import logging
-from pathlib import Path
 import typing as t
+from functools import update_wrapper
+from pathlib import Path
+
+import click
 from oslo_config import cfg
 
 import aprs_service_registry
@@ -41,7 +42,7 @@ class AliasedGroup(click.Group):
         Copied from `click` and extended for `aliases`.
         """
         def decorator(f):
-            aliases = kwargs.pop('aliases', [])
+            aliases = kwargs.pop("aliases", [])
             cmd = click.decorators.command(*args, **kwargs)(f)
             self.add_command(cmd)
             for alias in aliases:
@@ -57,7 +58,7 @@ class AliasedGroup(click.Group):
         Copied from `click` and extended for `aliases`.
         """
         def decorator(f):
-            aliases = kwargs.pop('aliases', [])
+            aliases = kwargs.pop("aliases", [])
             cmd = click.decorators.group(*args, **kwargs)(f)
             self.add_command(cmd)
             for alias in aliases:

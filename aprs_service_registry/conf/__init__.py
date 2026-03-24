@@ -2,6 +2,7 @@ from oslo_config import cfg
 
 from aprs_service_registry.conf import common
 
+
 CONF = cfg.CONF
 
 common.register_opts(CONF)

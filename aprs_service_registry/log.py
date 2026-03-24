@@ -1,7 +1,8 @@
 import logging
 import sys
-from oslo_config import cfg
+
 from loguru import logger
+from oslo_config import cfg
 
 
 LOG = logging.getLogger(__name__)
