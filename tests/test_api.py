@@ -61,3 +61,51 @@ class TestGetAllServices:
         callsigns = [s["callsign"] for s in data["services"]]
         assert "TEST1" in callsigns
         assert "TEST2" in callsigns
+
+
+class TestGetSingleService:
+    """Tests for GET /api/v1/registry/{callsign} endpoint."""
+
+    def setup_method(self):
+        """Clear services and add test data before each test."""
+        services = APRSServices()
+        services.data = {}
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test Service",
+                service_website="https://test.example.com",
+                software="test-soft 1.0",
+                callsign_owner="N0CALL",
+            ),
+        )
+
+    def test_get_service_found(self):
+        """Returns service data when callsign exists."""
+        response = client.get("/api/v1/registry/TESTCALL")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["callsign"] == "TESTCALL"
+        assert data["description"] == "Test Service"
+        assert data["service_website"] == "https://test.example.com"
+        assert data["software"] == "test-soft 1.0"
+        assert data["callsign_owner"] == "N0CALL"
+
+    def test_get_service_case_insensitive(self):
+        """Callsign lookup is case-insensitive."""
+        response = client.get("/api/v1/registry/testcall")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["callsign"] == "TESTCALL"
+
+    def test_get_service_not_found(self):
+        """Returns 404 when callsign doesn't exist."""
+        response = client.get("/api/v1/registry/NOTEXIST")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "detail" in data
+        assert "NOTEXIST" in data["detail"]
