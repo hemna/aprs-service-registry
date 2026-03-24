@@ -265,6 +265,11 @@ def send_and_wait_for_response(
             """
             nonlocal result
 
+            # Debug: log the packet structure
+            LOG.debug(
+                f"rx_callback received packet type={type(packet).__name__}: {packet}"
+            )
+
             # Extract fields - handle both dict (from aprslib) and object formats
             if isinstance(packet, dict):
                 pkt_from = packet.get("from", "")
@@ -274,6 +279,10 @@ def send_and_wait_for_response(
                 pkt_from = getattr(packet, "from_call", "")
                 pkt_message = getattr(packet, "message_text", "")
                 pkt_msgno = getattr(packet, "msgNo", None)
+
+            LOG.debug(
+                f"Extracted: from={pkt_from}, message={pkt_message}, target={callsign}"
+            )
 
             # Check if this is a message from our target (skip ACKs which have no message_text)
             if pkt_from.upper() == callsign.upper() and pkt_message:
