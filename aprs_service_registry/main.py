@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, Request, Response
+from fastapi import FastAPI, WebSocket, Request, Response, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -121,6 +121,24 @@ async def get_all_services():
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "services": services_list,
     }
+
+
+@app.get("/api/v1/registry/{callsign}", response_class=JSONResponse)
+async def get_service(callsign: str):
+    """Get a single service by callsign."""
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+        try:
+            return service.model_dump()
+        except AttributeError:
+            return service.dict()
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
 
 
 @app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
