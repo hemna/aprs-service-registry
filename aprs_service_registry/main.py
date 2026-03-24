@@ -91,11 +91,17 @@ class APRSServices(objectstore.ObjectStoreMixin):
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
+    from aprs_service_registry.health_checker import HealthCheckStore
+
     services = APRSServices()
     all_services = services.get_all()
+    store = HealthCheckStore()
 
     # Filter for website: show active and down, hide deleted
+    # Also build health check info
     filtered_services = {}
+    health_checks = {}
+
     for callsign, service in all_services.items():
         try:
             status = service.status if hasattr(service, "status") else "active"
@@ -104,11 +110,18 @@ async def get(request: Request):
 
         if status in ("active", "down"):
             filtered_services[callsign] = service
+            # Get health check result
+            last_result = store.get_last_result(callsign)
+            health_checks[callsign] = last_result
 
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "services": filtered_services},
+        context={
+            "request": request,
+            "services": filtered_services,
+            "health_checks": health_checks,
+        },
     )
 
 

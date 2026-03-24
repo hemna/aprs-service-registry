@@ -47,6 +47,7 @@
                 <tr>
                   <th>Callsign</th>
                   <th>Status</th>
+                  <th>Last Check</th>
                   <th>Owner</th>
                   <th>Description</th>
                   <th>URL</th>
@@ -62,6 +63,21 @@
                       <span class="badge bg-warning text-dark">DOWN</span>
                     {% else %}
                       <span class="badge bg-success">Active</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if health_checks[service] %}
+                      {% if health_checks[service].success %}
+                        <span class="health-check-success" title="{{ health_checks[service].timestamp }}">
+                          ✓ {{ health_checks[service].response_time_ms }}ms
+                        </span>
+                      {% else %}
+                        <span class="health-check-failure" title="{{ health_checks[service].timestamp }}">
+                          ✗ {{ health_checks[service].error }}
+                        </span>
+                      {% endif %}
+                    {% else %}
+                      <span class="health-check-none">—</span>
                     {% endif %}
                   </td>
                   <td>{{ services[service].callsign_owner or '-' }}</td>
