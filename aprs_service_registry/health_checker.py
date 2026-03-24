@@ -3,7 +3,7 @@
 import logging
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 import wrapt
 from oslo_config import cfg
@@ -69,3 +69,94 @@ class HealthCheckStore(objectstore.ObjectStoreMixin):
         """Get the most recent health check result for a service."""
         results = self.get_results(callsign)
         return results[0] if results else None
+
+
+def send_and_wait_for_response(
+    callsign: str,
+    message: str,
+    timeout: int,
+) -> tuple[str | None, int | None]:
+    """Send APRS message and wait for response.
+
+    Returns:
+        Tuple of (response_text, response_time_ms) or (None, None) on timeout.
+
+    Note: This is a placeholder that will be implemented with actual APRSD
+    integration. For now, it always returns timeout for testing purposes.
+    """
+    # PLACEHOLDER: APRSD integration will be implemented in a separate task
+    # This stub allows the rest of the health check system to be tested
+    LOG.warning(
+        f"APRSD integration not yet implemented. Would send '{message}' to {callsign}"
+    )
+    return (None, None)
+
+
+def check_service(callsign: str) -> None:
+    """Run a health check for a single service.
+
+    Skips services that are:
+    - Deleted (status == "deleted")
+    - Missing health_check_command
+    """
+    from aprs_service_registry.main import APRSServices
+
+    services = APRSServices()
+    store = HealthCheckStore()
+
+    try:
+        service = services[callsign.upper()]
+    except KeyError:
+        LOG.warning(f"Service {callsign} not found, skipping health check")
+        return
+
+    # Get service dict for status check
+    try:
+        service_dict = service.model_dump()
+    except AttributeError:
+        service_dict = service.dict()
+
+    # Skip deleted services
+    status = service_dict.get("status", "active")
+    if status == "deleted":
+        LOG.debug(f"Skipping health check for deleted service {callsign}")
+        return
+
+    # Skip services without health_check_command
+    health_check_command = service_dict.get("health_check_command")
+    if not health_check_command:
+        LOG.debug(f"Skipping health check for {callsign}: no health_check_command")
+        return
+
+    LOG.info(f"Running health check for {callsign}: sending '{health_check_command}'")
+
+    # Send message and wait for response
+    timeout = CONF.registry.health_check_timeout
+    response_text, response_time_ms = send_and_wait_for_response(
+        callsign,
+        health_check_command,
+        timeout,
+    )
+
+    # Record result
+    if response_text is not None:
+        result = HealthCheckResult(
+            timestamp=datetime.now(timezone.utc),
+            success=True,
+            response_time_ms=response_time_ms,
+            response_text=response_text[:100] if response_text else None,
+            error=None,
+        )
+        LOG.info(f"Health check for {callsign}: SUCCESS ({response_time_ms}ms)")
+    else:
+        result = HealthCheckResult(
+            timestamp=datetime.now(timezone.utc),
+            success=False,
+            response_time_ms=None,
+            response_text=None,
+            error="Timeout",
+        )
+        LOG.warning(f"Health check for {callsign}: TIMEOUT")
+
+    store.add_result(callsign, result)
+    store.save()

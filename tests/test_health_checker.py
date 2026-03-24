@@ -1,6 +1,7 @@
 """Tests for health checker module."""
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -127,3 +128,135 @@ class TestHealthCheckStore:
 
         store = HealthCheckStore()
         assert store.get_last_result("NONEXISTENT") is None
+
+
+class TestCheckService:
+    """Tests for check_service function."""
+
+    def setup_method(self):
+        """Clear stores before each test."""
+        from aprs_service_registry.health_checker import HealthCheckStore
+        from aprs_service_registry.main import APRSServices
+
+        APRSServices().data = {}
+        HealthCheckStore().data = {}
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_success(self, mock_send):
+        """Successful health check records success result."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckStore,
+            check_service,
+        )
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        # Setup service
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command="ping",
+            ),
+        )
+
+        # Mock APRSD response
+        mock_send.return_value = ("Pong!", 1500)
+
+        # Run check
+        check_service("TESTCALL")
+
+        # Verify result stored
+        store = HealthCheckStore()
+        result = store.get_last_result("TESTCALL")
+        assert result is not None
+        assert result.success is True
+        assert result.response_time_ms == 1500
+        assert result.response_text == "Pong!"
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_timeout(self, mock_send):
+        """Timeout records failure result."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckStore,
+            check_service,
+        )
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command="ping",
+            ),
+        )
+
+        # Mock timeout
+        mock_send.return_value = (None, None)
+
+        check_service("TESTCALL")
+
+        store = HealthCheckStore()
+        result = store.get_last_result("TESTCALL")
+        assert result is not None
+        assert result.success is False
+        assert result.error == "Timeout"
+
+    def test_check_service_skips_deleted(self):
+        """Deleted services are skipped."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckStore,
+            check_service,
+        )
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "DELETED",
+            registryRequest(
+                callsign="DELETED",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="deleted",
+                health_check_command="ping",
+            ),
+        )
+
+        check_service("DELETED")
+
+        # No result should be stored
+        store = HealthCheckStore()
+        assert store.get_last_result("DELETED") is None
+
+    def test_check_service_skips_no_command(self):
+        """Services without health_check_command are skipped."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckStore,
+            check_service,
+        )
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "NOCOMMAND",
+            registryRequest(
+                callsign="NOCOMMAND",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                health_check_command=None,
+            ),
+        )
+
+        check_service("NOCOMMAND")
+
+        store = HealthCheckStore()
+        assert store.get_last_result("NOCOMMAND") is None
