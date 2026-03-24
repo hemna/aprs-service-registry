@@ -141,8 +141,11 @@ async def get_all_services(
     include_all: bool = False,
 ):
     """Get all registered services, filtered by status."""
+    from aprs_service_registry.health_checker import HealthCheckStore
+
     services = APRSServices()
     all_services = services.get_all()
+    store = HealthCheckStore()
 
     # Determine which statuses to include
     allowed_statuses = {"active"}
@@ -165,6 +168,18 @@ async def get_all_services(
             service_dict["status"] = "active"
 
         if service_dict["status"] in allowed_statuses:
+            # Add health check info
+            last_result = store.get_last_result(callsign)
+            if last_result:
+                service_dict["last_health_check"] = {
+                    "timestamp": last_result.timestamp.isoformat(),
+                    "success": last_result.success,
+                    "response_time_ms": last_result.response_time_ms,
+                    "error": last_result.error,
+                }
+            else:
+                service_dict["last_health_check"] = None
+
             services_list.append(service_dict)
 
     return {
@@ -177,15 +192,32 @@ async def get_all_services(
 @app.get("/api/v1/registry/{callsign}", response_class=JSONResponse)
 async def get_service(callsign: str):
     """Get a single service by callsign."""
+    from aprs_service_registry.health_checker import HealthCheckStore
+
     services = APRSServices()
     callsign_upper = callsign.upper()
 
     try:
         service = services[callsign_upper]
         try:
-            return service.model_dump()
+            service_dict = service.model_dump()
         except AttributeError:
-            return service.dict()
+            service_dict = service.dict()
+
+        # Add health check info
+        store = HealthCheckStore()
+        last_result = store.get_last_result(callsign_upper)
+        if last_result:
+            service_dict["last_health_check"] = {
+                "timestamp": last_result.timestamp.isoformat(),
+                "success": last_result.success,
+                "response_time_ms": last_result.response_time_ms,
+                "error": last_result.error,
+            }
+        else:
+            service_dict["last_health_check"] = None
+
+        return service_dict
     except KeyError:
         raise HTTPException(
             status_code=404,
