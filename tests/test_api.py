@@ -296,3 +296,56 @@ class TestStatusFiltering:
         data = response.json()
 
         assert data["count"] == 4
+
+
+class TestSoftDelete:
+    """Tests for soft delete behavior."""
+
+    def setup_method(self):
+        """Clear services and add test data."""
+        services = APRSServices()
+        services.data = {}
+        services.add(
+            "TODELETE",
+            registryRequest(
+                callsign="TODELETE",
+                description="Service to delete",
+                service_website="https://delete.com",
+                software="test",
+                status="active",
+            ),
+        )
+
+    def test_delete_sets_status_deleted(self):
+        """DELETE sets status to deleted instead of removing."""
+        # Verify service exists and is active
+        get_response = client.get("/api/v1/registry/TODELETE")
+        assert get_response.status_code == 200
+        assert get_response.json()["status"] == "active"
+
+        # Delete the service
+        delete_response = client.delete("/api/v1/registry/TODELETE")
+        assert delete_response.status_code == 200
+        data = delete_response.json()
+        assert data["status"] == "ok"
+        assert "deleted" in data["message"].lower()
+
+        # Service should still exist but with deleted status
+        get_response = client.get("/api/v1/registry/TODELETE")
+        assert get_response.status_code == 200
+        assert get_response.json()["status"] == "deleted"
+
+    def test_deleted_service_excluded_from_list(self):
+        """Deleted services are excluded from default list."""
+        # Delete the service
+        client.delete("/api/v1/registry/TODELETE")
+
+        # Should not appear in default list
+        list_response = client.get("/api/v1/registry")
+        callsigns = [s["callsign"] for s in list_response.json()["services"]]
+        assert "TODELETE" not in callsigns
+
+        # Should appear with include_deleted
+        list_response = client.get("/api/v1/registry?include_deleted=true")
+        callsigns = [s["callsign"] for s in list_response.json()["services"]]
+        assert "TODELETE" in callsigns

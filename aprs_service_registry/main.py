@@ -164,11 +164,32 @@ async def get_service(callsign: str):
 
 @app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
 async def registry_delete(callsign: str):
-    """Remove a service from the registry."""
+    """Soft delete a service (set status to deleted)."""
     services = APRSServices()
-    LOG.info(f"Removing {callsign} from the registry.")
-    services.remove(callsign.upper())
-    return json.dumps({"status": "ok"})
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+        # Update status to deleted
+        try:
+            service_dict = service.model_dump()
+        except AttributeError:
+            service_dict = service.dict()
+
+        service_dict["status"] = "deleted"
+        updated_service = registryRequest(**service_dict)
+        services.add(callsign_upper, updated_service)
+
+        LOG.info(f"Soft deleted {callsign_upper} from the registry.")
+        return {
+            "status": "ok",
+            "message": f"Service '{callsign_upper}' marked as deleted",
+        }
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
 
 
 async def ws_process_balls(msg):
