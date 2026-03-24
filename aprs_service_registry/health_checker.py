@@ -249,7 +249,7 @@ def send_and_wait_for_response(
 
         def consume():
             try:
-                client.consumer(rx_callback, raw=False, blocking=True)
+                client.consumer(rx_callback, raw=False)
             except StopIteration:
                 pass
             except Exception as e:
