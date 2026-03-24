@@ -5,8 +5,10 @@ FROM python:3.11-slim-bookworm AS builder
 WORKDIR /build
 
 # Install build dependencies if any (e.g. for wheels)
+# git is required to install aprsd from GitHub
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
