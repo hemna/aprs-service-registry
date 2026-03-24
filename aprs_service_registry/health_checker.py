@@ -89,7 +89,7 @@ def send_and_wait_for_response(
     # PLACEHOLDER: APRSD integration will be implemented in a separate task
     # This stub allows the rest of the health check system to be tested
     LOG.warning(
-        f"APRSD integration not yet implemented. Would send '{message}' to {callsign}"
+        f"APRSD integration not yet implemented. Would send '{message}' to {callsign}",
     )
     return (None, None)
 
@@ -230,7 +230,7 @@ def setup_scheduler() -> AsyncIOScheduler | None:
     interval = calculate_stagger_interval(len(checkable))
     LOG.info(
         f"Setting up health check scheduler: {len(checkable)} services, "
-        f"{interval}s interval"
+        f"{interval}s interval",
     )
 
     _scheduler = AsyncIOScheduler()
@@ -250,7 +250,7 @@ def setup_scheduler() -> AsyncIOScheduler | None:
             next_run_time=datetime.now() + timedelta(seconds=initial_delay),
         )
         LOG.debug(
-            f"Scheduled health check for {callsign} (initial delay: {initial_delay}s)"
+            f"Scheduled health check for {callsign} (initial delay: {initial_delay}s)",
         )
 
     return _scheduler

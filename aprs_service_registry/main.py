@@ -27,9 +27,7 @@ _WEB_DIR = Path(__file__).resolve().parent / "web"
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
     from aprs_service_registry.health_checker import (
-        setup_scheduler,
-        start_scheduler,
-        stop_scheduler,
+        setup_scheduler, start_scheduler, stop_scheduler,
     )
 
     # Startup: Load services from disk

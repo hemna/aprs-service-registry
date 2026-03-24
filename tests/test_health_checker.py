@@ -3,8 +3,6 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-import pytest
-
 
 class TestHealthCheckResult:
     """Tests for HealthCheckResult dataclass."""
@@ -56,8 +54,7 @@ class TestHealthCheckStore:
     def test_add_result(self):
         """Can add a health check result for a service."""
         from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
+            HealthCheckResult, HealthCheckStore,
         )
 
         store = HealthCheckStore()
@@ -78,8 +75,7 @@ class TestHealthCheckStore:
     def test_keeps_only_last_3_results(self):
         """Store keeps only the last 3 results per service."""
         from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
+            HealthCheckResult, HealthCheckStore,
         )
 
         store = HealthCheckStore()
@@ -104,8 +100,7 @@ class TestHealthCheckStore:
     def test_get_last_result(self):
         """Can get the most recent result for a service."""
         from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
+            HealthCheckResult, HealthCheckStore,
         )
 
         store = HealthCheckStore()
@@ -145,8 +140,7 @@ class TestCheckService:
     def test_check_service_success(self, mock_send):
         """Successful health check records success result."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore,
-            check_service,
+            HealthCheckStore, check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -181,8 +175,7 @@ class TestCheckService:
     def test_check_service_timeout(self, mock_send):
         """Timeout records failure result."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore,
-            check_service,
+            HealthCheckStore, check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -212,8 +205,7 @@ class TestCheckService:
     def test_check_service_skips_deleted(self):
         """Deleted services are skipped."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore,
-            check_service,
+            HealthCheckStore, check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -239,8 +231,7 @@ class TestCheckService:
     def test_check_service_skips_no_command(self):
         """Services without health_check_command are skipped."""
         from aprs_service_registry.health_checker import (
-            HealthCheckStore,
-            check_service,
+            HealthCheckStore, check_service,
         )
         from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -273,7 +264,9 @@ class TestScheduler:
 
     def test_calculate_stagger_interval(self):
         """Stagger interval calculated correctly."""
-        from aprs_service_registry.health_checker import calculate_stagger_interval
+        from aprs_service_registry.health_checker import (
+            calculate_stagger_interval,
+        )
 
         # 10 services = 360 second interval (6 minutes)
         assert calculate_stagger_interval(10) == 360
@@ -286,7 +279,9 @@ class TestScheduler:
 
     def test_calculate_stagger_interval_zero_services(self):
         """Returns None if no checkable services."""
-        from aprs_service_registry.health_checker import calculate_stagger_interval
+        from aprs_service_registry.health_checker import (
+            calculate_stagger_interval,
+        )
 
         assert calculate_stagger_interval(0) is None
 

@@ -697,10 +697,10 @@ def send_and_wait_for_response(
     timeout: int,
 ) -> tuple[str | None, int | None]:
     """Send APRS message and wait for response.
-    
+
     Returns:
         Tuple of (response_text, response_time_ms) or (None, None) on timeout.
-    
+
     Note: This is a placeholder that will be implemented with actual APRSD
     integration. For now, it always returns timeout for testing purposes.
     """
@@ -712,7 +712,7 @@ def send_and_wait_for_response(
 
 def check_service(callsign: str) -> None:
     """Run a health check for a single service.
-    
+
     Skips services that are:
     - Deleted (status == "deleted")
     - Missing health_check_command
@@ -758,7 +758,7 @@ def check_service(callsign: str) -> None:
 
     # Record result
     from datetime import timezone
-    
+
     if response_text is not None:
         result = HealthCheckResult(
             timestamp=datetime.now(timezone.utc),
@@ -898,10 +898,10 @@ SECONDS_PER_HOUR = 3600
 
 def calculate_stagger_interval(num_services: int) -> int | None:
     """Calculate interval between health checks to spread them over an hour.
-    
+
     Args:
         num_services: Number of services to check
-        
+
     Returns:
         Interval in seconds, or None if no services to check
     """
@@ -912,7 +912,7 @@ def calculate_stagger_interval(num_services: int) -> int | None:
 
 def get_checkable_services() -> list[str]:
     """Get list of service callsigns that should be health checked.
-    
+
     Returns services that:
     - Have a health_check_command set
     - Are not deleted (status != "deleted")
@@ -972,7 +972,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 def setup_scheduler() -> AsyncIOScheduler | None:
     """Set up the health check scheduler.
-    
+
     Returns:
         The scheduler instance, or None if health checks are disabled.
     """
@@ -999,7 +999,7 @@ def setup_scheduler() -> AsyncIOScheduler | None:
     for i, callsign in enumerate(checkable):
         # Initial delay to stagger the first run
         initial_delay = i * interval
-        
+
         _scheduler.add_job(
             check_service,
             "interval",
@@ -1059,16 +1059,16 @@ async def lifespan(app: FastAPI):
         start_scheduler,
         stop_scheduler,
     )
-    
+
     # Load services from disk
     APRSServices().load()
-    
+
     # Set up health check scheduler
     setup_scheduler()
     start_scheduler()
-    
+
     yield
-    
+
     # Shutdown
     stop_scheduler()
     APRSServices().save()

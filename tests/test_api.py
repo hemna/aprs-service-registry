@@ -431,8 +431,7 @@ class TestHealthCheckInResponse:
         from datetime import timezone
 
         from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
+            HealthCheckResult, HealthCheckStore,
         )
 
         # Add service
@@ -497,8 +496,7 @@ class TestHealthCheckInResponse:
         from datetime import timezone
 
         from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
+            HealthCheckResult, HealthCheckStore,
         )
 
         services = APRSServices()
