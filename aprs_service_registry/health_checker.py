@@ -244,7 +244,6 @@ def send_and_wait_for_response(
     try:
         from aprsd.client.client import APRSDClient
         from aprsd.packets import MessagePacket
-        from aprsd.packets import collector as packet_collector
         from aprsd.threads import tx
 
         # Get our callsign from APRSD config
@@ -259,41 +258,51 @@ def send_and_wait_for_response(
         start_time = time.time()
 
         def rx_callback(packet):
-            """Callback for received packets."""
+            """Callback for received packets.
+
+            Note: With raw=False, APRSD's consumer returns parsed dicts from aprslib,
+            not APRSD packet objects. We handle both formats for robustness.
+            """
             nonlocal result
 
-            # Register with packet collector
-            packet_collector.PacketCollector().rx(packet)
+            # Extract fields - handle both dict (from aprslib) and object formats
+            if isinstance(packet, dict):
+                pkt_from = packet.get("from", "")
+                pkt_message = packet.get("message_text", "")
+                pkt_msgno = packet.get("msgNo")
+            else:
+                pkt_from = getattr(packet, "from_call", "")
+                pkt_message = getattr(packet, "message_text", "")
+                pkt_msgno = getattr(packet, "msgNo", None)
 
-            # Check if this is a message from our target
-            if hasattr(packet, "from_call") and hasattr(packet, "message_text"):
-                if packet.from_call.upper() == callsign.upper():
-                    elapsed_ms = int((time.time() - start_time) * 1000)
-                    result["response_text"] = packet.message_text
-                    result["response_time_ms"] = elapsed_ms
-                    LOG.debug(
-                        f"Received response from {callsign}: "
-                        f"'{packet.message_text}' in {elapsed_ms}ms",
-                    )
+            # Check if this is a message from our target (skip ACKs which have no message_text)
+            if pkt_from.upper() == callsign.upper() and pkt_message:
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                result["response_text"] = pkt_message
+                result["response_time_ms"] = elapsed_ms
+                LOG.debug(
+                    f"Received response from {callsign}: "
+                    f"'{pkt_message}' in {elapsed_ms}ms",
+                )
 
-                    # Send ACK for the received message
-                    try:
-                        from aprsd.packets import AckPacket
+                # Send ACK for the received message
+                try:
+                    from aprsd.packets import AckPacket
 
-                        if hasattr(packet, "msgNo") and packet.msgNo:
-                            tx.send(
-                                AckPacket(
-                                    from_call=from_call,
-                                    to_call=packet.from_call,
-                                    msgNo=packet.msgNo,
-                                ),
-                                direct=True,
-                            )
-                    except Exception as e:
-                        LOG.warning(f"Failed to send ACK: {e}")
+                    if pkt_msgno:
+                        tx.send(
+                            AckPacket(
+                                from_call=from_call,
+                                to_call=pkt_from,
+                                msgNo=pkt_msgno,
+                            ),
+                            direct=True,
+                        )
+                except Exception as e:
+                    LOG.warning(f"Failed to send ACK: {e}")
 
-                    stop_event.set()
-                    raise StopIteration
+                stop_event.set()
+                raise StopIteration
 
         # Create and send the message
         LOG.info(f"Sending health check to {callsign}: '{message}'")
