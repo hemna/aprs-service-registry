@@ -67,8 +67,9 @@ def attach_last_health_check(service_dict: dict, callsign: str, store) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
-    # Startup: Load services from disk
+    # Startup: Load services and health check results from disk
     APRSServices().load()
+    HealthCheckStore().load()
 
     # Set up health check scheduler
     setup_scheduler()
@@ -76,9 +77,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown: Stop scheduler and save services
+    # Shutdown: Stop scheduler and save data
     stop_scheduler()
     APRSServices().save()
+    HealthCheckStore().save()
 
 
 app = FastAPI(lifespan=lifespan)

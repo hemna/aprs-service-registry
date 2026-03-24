@@ -1635,4 +1635,4 @@ This plan implements:
 5. **Website UI** (Task 10): "Last Check" column with status indicators
 6. **Verification** (Tasks 11-12): Tests, linting, documentation
 
-**Note:** The APRSD integration (`send_and_wait_for_response`) is left as a placeholder. A future task will implement the actual APRS-IS messaging once the infrastructure is in place and tested.
+**Note:** APRSD integration is implemented in `aprs_service_registry/health_checker.py`. The `send_and_wait_for_response` function uses APRSD's `MessagePacket` to send health check probes and listens for responses via the client consumer.
