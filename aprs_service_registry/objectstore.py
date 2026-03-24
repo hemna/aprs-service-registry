@@ -24,6 +24,7 @@ class ObjectStoreMixin:
     When APRSD Starts, it calls load()
     aprsd server -f (flush) will wipe all saved objects.
     """
+
     # Should we nuke the old pickle file on save
     # if there is nothing to save?
     flush_on_save = False
@@ -69,6 +70,13 @@ class ObjectStoreMixin:
 
         return dump
 
+    def _dump_unlocked(self):
+        """Dump data without acquiring lock. Caller must hold lock."""
+        dump = {}
+        for key in self.data.keys():
+            dump[key] = self.data[key]
+        return dump
+
     def save(self):
         """Save any queued to disk?"""
         if not CONF.registry.enable_save:
@@ -81,6 +89,27 @@ class ObjectStoreMixin:
             )
             with open(self._save_filename(), "wb+") as fp:
                 pickle.dump(self._dump(), fp)
+        elif self.flush_on_save:
+            LOG.debug(
+                "{} Nothing to save, flushing old save file '{}'".format(
+                    self.__class__.__name__,
+                    self._save_filename(),
+                ),
+            )
+            self.flush()
+
+    def _save_unlocked(self):
+        """Save to disk without acquiring lock. Caller must hold lock."""
+        if not CONF.registry.enable_save:
+            return
+        if len(self.data) > 0:
+            LOG.info(
+                f"{self.__class__.__name__}::Saving"
+                f" {len(self.data)} entries to disk at"
+                f"{CONF.registry.save_location}",
+            )
+            with open(self._save_filename(), "wb+") as fp:
+                pickle.dump(self._dump_unlocked(), fp)
         elif self.flush_on_save:
             LOG.debug(
                 "{} Nothing to save, flushing old save file '{}'".format(

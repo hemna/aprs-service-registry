@@ -88,8 +88,8 @@ class HealthCheckStore(objectstore.ObjectStoreMixin):
         # Keep only last 3
         self.data[callsign_upper] = self.data[callsign_upper][:MAX_RESULTS_PER_SERVICE]
 
-        # Persist to disk
-        self.save()
+        # Persist to disk (use unlocked version since we hold the lock)
+        self._save_unlocked()
 
     @wrapt.synchronized(lock)
     def get_results(self, callsign: str) -> list[HealthCheckResult]:

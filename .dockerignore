@@ -1,0 +1,37 @@
+# Virtual envs and local dev
+.venv
+.aprs-service-registry-venv
+.tox
+__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+*.egg-info
+.eggs
+
+# Build / dist (we build from source)
+dist
+build
+*.egg
+
+# Git and IDE
+.git
+.gitignore
+.idea
+.DS_Store
+
+# Docs and tests (not needed at runtime)
+docs
+*.md
+!README.rst
+
+# CI / lint / config that doesn't affect the app
+.pre-commit-config.yaml
+gray.conf
+tox.ini
+Makefile
+Makefile.venv
+dev-requirements.in
+dev-requirements.txt
+requirements.in

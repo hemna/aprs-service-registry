@@ -133,7 +133,8 @@ class APRSServices(objectstore.ObjectStoreMixin):
         as it ensures data is saved immediately.
         """
         self.data[callsign] = data
-        self.save()
+        # Call _save_unlocked to avoid deadlock (we already hold the lock)
+        self._save_unlocked()
 
     @wrapt.synchronized(lock)
     def remove(self, callsign):
