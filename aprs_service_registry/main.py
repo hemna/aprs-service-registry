@@ -74,10 +74,23 @@ def save_services(*args, **kwargs):
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
     services = APRSServices()
+    all_services = services.get_all()
+
+    # Filter for website: show active and down, hide deleted
+    filtered_services = {}
+    for callsign, service in all_services.items():
+        try:
+            status = service.status if hasattr(service, "status") else "active"
+        except AttributeError:
+            status = "active"
+
+        if status in ("active", "down"):
+            filtered_services[callsign] = service
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "services": services},
+        context={"request": request, "services": filtered_services},
     )
 
 

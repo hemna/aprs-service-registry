@@ -492,6 +492,15 @@ main {
   cursor: not-allowed;
 }
 
+/* Service status styling */
+.service-down {
+    opacity: 0.7;
+}
+
+.service-down td {
+    color: #6c757d;
+}
+
 /* Responsive: stack header nav on small screens */
 @media (max-width: 576px) {
   .header-inner {

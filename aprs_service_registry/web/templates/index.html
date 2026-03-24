@@ -46,6 +46,7 @@
               <thead>
                 <tr>
                   <th>Callsign</th>
+                  <th>Status</th>
                   <th>Owner</th>
                   <th>Description</th>
                   <th>URL</th>
@@ -54,8 +55,15 @@
               </thead>
               <tbody>
                 {% for service in services %}
-                <tr>
+                <tr{% if services[service].status == 'down' %} class="service-down"{% endif %}>
                   <td><span class="callsign">{{ service }}</span></td>
+                  <td>
+                    {% if services[service].status == 'down' %}
+                      <span class="badge bg-warning text-dark">DOWN</span>
+                    {% else %}
+                      <span class="badge bg-success">Active</span>
+                    {% endif %}
+                  </td>
                   <td>{{ services[service].callsign_owner or '-' }}</td>
                   <td>{{ services[service].description }}</td>
                   <td>
