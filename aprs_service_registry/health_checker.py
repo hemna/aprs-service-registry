@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -17,6 +18,10 @@ CONF = cfg.CONF
 
 MAX_RESULTS_PER_SERVICE = 3
 SECONDS_PER_HOUR = 3600
+
+# Global flag to track if APRSD client is initialized
+_aprsd_initialized = False
+_aprsd_init_lock = threading.Lock()
 
 
 @dataclass
@@ -73,6 +78,55 @@ class HealthCheckStore(objectstore.ObjectStoreMixin):
         return results[0] if results else None
 
 
+def _initialize_aprsd() -> bool:
+    """Initialize APRSD client with configuration.
+
+    Returns:
+        True if initialization successful, False otherwise.
+    """
+    global _aprsd_initialized
+
+    with _aprsd_init_lock:
+        if _aprsd_initialized:
+            return True
+
+        try:
+            # Import APRSD modules
+            from aprsd import conf as aprsd_conf
+            from aprsd.client.client import APRSDClient
+
+            # Load APRSD config from the path specified in our config
+            aprsd_config_path = CONF.registry.aprsd_config_path
+            LOG.info(f"Loading APRSD config from {aprsd_config_path}")
+
+            # APRSD uses oslo.config, we need to load its config
+            aprsd_conf.conf.register_opts()
+            cfg.CONF(
+                args=[],
+                default_config_files=[aprsd_config_path],
+            )
+
+            # Initialize the APRSD client (singleton)
+            client = APRSDClient()
+            if client.is_connected:
+                LOG.info("APRSD client connected to APRS-IS")
+                _aprsd_initialized = True
+                return True
+            else:
+                LOG.error("APRSD client failed to connect to APRS-IS")
+                return False
+
+        except FileNotFoundError:
+            LOG.error(f"APRSD config file not found: {aprsd_config_path}")
+            return False
+        except ImportError as e:
+            LOG.error(f"Failed to import APRSD modules: {e}")
+            return False
+        except Exception as e:
+            LOG.error(f"Failed to initialize APRSD client: {e}")
+            return False
+
+
 def send_and_wait_for_response(
     callsign: str,
     message: str,
@@ -80,18 +134,116 @@ def send_and_wait_for_response(
 ) -> tuple[str | None, int | None]:
     """Send APRS message and wait for response.
 
+    Args:
+        callsign: Target callsign to send message to
+        message: Message text to send (e.g., "ping", "help")
+        timeout: Seconds to wait for response
+
     Returns:
         Tuple of (response_text, response_time_ms) or (None, None) on timeout.
-
-    Note: This is a placeholder that will be implemented with actual APRSD
-    integration. For now, it always returns timeout for testing purposes.
     """
-    # PLACEHOLDER: APRSD integration will be implemented in a separate task
-    # This stub allows the rest of the health check system to be tested
-    LOG.warning(
-        f"APRSD integration not yet implemented. Would send '{message}' to {callsign}",
-    )
-    return (None, None)
+    # Check if health checks are enabled
+    if not CONF.registry.health_check_enabled:
+        LOG.debug("Health checks disabled, skipping APRS message")
+        return (None, None)
+
+    # Initialize APRSD if needed
+    if not _initialize_aprsd():
+        LOG.error("Cannot send health check: APRSD not initialized")
+        return (None, None)
+
+    try:
+        from aprsd.client.client import APRSDClient
+        from aprsd.packets import MessagePacket
+        from aprsd.packets import collector as packet_collector
+        from aprsd.threads import tx
+
+        # Get our callsign from APRSD config
+        from_call = cfg.CONF.callsign
+        if not from_call:
+            LOG.error("No callsign configured in APRSD config")
+            return (None, None)
+
+        # Result container for thread communication
+        result = {"response_text": None, "response_time_ms": None}
+        stop_event = threading.Event()
+        start_time = time.time()
+
+        def rx_callback(packet):
+            """Callback for received packets."""
+            nonlocal result
+
+            # Register with packet collector
+            packet_collector.PacketCollector().rx(packet)
+
+            # Check if this is a message from our target
+            if hasattr(packet, "from_call") and hasattr(packet, "message_text"):
+                if packet.from_call.upper() == callsign.upper():
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    result["response_text"] = packet.message_text
+                    result["response_time_ms"] = elapsed_ms
+                    LOG.debug(
+                        f"Received response from {callsign}: "
+                        f"'{packet.message_text}' in {elapsed_ms}ms",
+                    )
+
+                    # Send ACK for the received message
+                    try:
+                        from aprsd.packets import AckPacket
+
+                        if hasattr(packet, "msgNo") and packet.msgNo:
+                            tx.send(
+                                AckPacket(
+                                    from_call=from_call,
+                                    to_call=packet.from_call,
+                                    msgNo=packet.msgNo,
+                                ),
+                                direct=True,
+                            )
+                    except Exception as e:
+                        LOG.warning(f"Failed to send ACK: {e}")
+
+                    stop_event.set()
+                    raise StopIteration
+
+        # Create and send the message
+        LOG.info(f"Sending health check to {callsign}: '{message}'")
+        packet = MessagePacket(
+            from_call=from_call,
+            to_call=callsign.upper(),
+            message_text=message,
+        )
+        tx.send(packet, direct=True)
+
+        # Start consumer in a thread to receive response
+        client = APRSDClient()
+
+        def consume():
+            try:
+                client.consumer(rx_callback, raw=False, blocking=True)
+            except StopIteration:
+                pass
+            except Exception as e:
+                LOG.debug(f"Consumer stopped: {e}")
+
+        consumer_thread = threading.Thread(target=consume, daemon=True)
+        consumer_thread.start()
+
+        # Wait for response or timeout
+        stop_event.wait(timeout=timeout)
+
+        if result["response_text"] is not None:
+            return (result["response_text"], result["response_time_ms"])
+        else:
+            LOG.warning(f"Health check timeout for {callsign} after {timeout}s")
+            return (None, None)
+
+    except ImportError as e:
+        LOG.error(f"APRSD import error: {e}")
+        return (None, None)
+    except Exception as e:
+        LOG.error(f"Error sending health check to {callsign}: {e}")
+        return (None, None)
 
 
 def check_service(callsign: str) -> None:

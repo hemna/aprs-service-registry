@@ -332,3 +332,49 @@ class TestScheduler:
         checkable = get_checkable_services()
         assert len(checkable) == 1
         assert checkable[0] == "CHECKABLE"
+
+
+class TestSendAndWaitForResponse:
+    """Tests for send_and_wait_for_response APRSD integration."""
+
+    def test_returns_none_when_health_checks_disabled(self):
+        """Returns (None, None) when health checks are disabled."""
+        from unittest.mock import patch
+
+        from aprs_service_registry.health_checker import (
+            send_and_wait_for_response,
+        )
+
+        # Health checks are disabled by default in test config
+        with patch(
+            "aprs_service_registry.health_checker.CONF.registry.health_check_enabled",
+            False,
+        ):
+            result = send_and_wait_for_response("TESTCALL", "ping", 10)
+            assert result == (None, None)
+
+    def test_returns_none_when_aprsd_init_fails(self):
+        """Returns (None, None) when APRSD initialization fails."""
+        from unittest.mock import patch
+
+        # Reset the initialization flag
+        import aprs_service_registry.health_checker as hc
+        from aprs_service_registry.health_checker import (
+            send_and_wait_for_response,
+        )
+
+        hc._aprsd_initialized = False
+
+        with patch(
+            "aprs_service_registry.health_checker.CONF.registry.health_check_enabled",
+            True,
+        ):
+            with patch(
+                "aprs_service_registry.health_checker.CONF.registry.aprsd_config_path",
+                "/nonexistent/config.conf",
+            ):
+                result = send_and_wait_for_response("TESTCALL", "ping", 10)
+                assert result == (None, None)
+
+        # Reset for other tests
+        hc._aprsd_initialized = False
