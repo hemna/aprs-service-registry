@@ -262,4 +262,42 @@ Remove a service from the registry.
 
    curl -X DELETE https://aprs.hemna.com/api/v1/registry/YOURCALL
 
+Service Status
+--------------
+
+Services have a status field that can be one of:
+
+- **active** (default) — Service is operational
+- **down** — Service is temporarily unavailable
+- **deleted** — Service is soft-deleted
+
+**Filtering by status:**
+
+By default, ``GET /api/v1/registry`` returns only active services. Use query parameters to include other statuses:
+
+.. code-block:: bash
+
+   # Include down services (active + down)
+   curl https://aprs.hemna.com/api/v1/registry?include_down=true
+
+   # Include deleted services (active + deleted)
+   curl https://aprs.hemna.com/api/v1/registry?include_deleted=true
+
+   # Include all services
+   curl https://aprs.hemna.com/api/v1/registry?include_all=true
+
+**Setting service status:**
+
+Include the ``status`` field when registering or updating a service:
+
+.. code-block:: bash
+
+   curl -X POST https://aprs.hemna.com/api/v1/registry \
+     -H "Content-Type: application/json" \
+     -d '{"callsign": "MYSERVICE", "description": "...", "service_website": "...", "software": "...", "status": "down"}'
+
+**Soft delete:**
+
+``DELETE /api/v1/registry/{callsign}`` sets the service status to ``deleted`` rather than removing it permanently. The service can still be fetched by callsign and will appear with ``?include_deleted=true``.
+
 The web UI at http://localhost:8001/ also has an interactive "How to Register" section with examples (cURL, APRSD config, etc.).
