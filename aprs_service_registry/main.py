@@ -4,6 +4,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import wrapt
 from fastapi import FastAPI, HTTPException, Request, WebSocket
@@ -34,6 +35,7 @@ class registryRequest(BaseModel):
     service_website: str
     software: str
     callsign_owner: str | None = None
+    status: Literal["active", "down", "deleted"] = "active"
 
 
 class APRSServices(objectstore.ObjectStoreMixin):
@@ -136,7 +138,8 @@ async def get_service(callsign: str):
             return service.dict()
     except KeyError:
         raise HTTPException(
-            status_code=404, detail=f"Service '{callsign_upper}' not found",
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
         )
 
 

@@ -109,3 +109,81 @@ class TestGetSingleService:
         data = response.json()
         assert "detail" in data
         assert "NOTEXIST" in data["detail"]
+
+
+class TestServiceStatus:
+    """Tests for service status field."""
+
+    def setup_method(self):
+        """Clear services before each test."""
+        services = APRSServices()
+        services.data = {}
+
+    def test_register_service_default_status(self):
+        """New services default to active status."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+            },
+        )
+        assert response.status_code == 200
+
+        # Fetch and verify status
+        get_response = client.get("/api/v1/registry/TEST")
+        assert get_response.status_code == 200
+        assert get_response.json()["status"] == "active"
+
+    def test_register_service_with_status(self):
+        """Can register a service with explicit status."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+                "status": "down",
+            },
+        )
+        assert response.status_code == 200
+
+        get_response = client.get("/api/v1/registry/TEST")
+        assert get_response.json()["status"] == "down"
+
+    def test_register_service_invalid_status(self):
+        """Invalid status returns 422 validation error."""
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST",
+                "description": "Test Service",
+                "service_website": "https://test.com",
+                "software": "test 1.0",
+                "status": "invalid",
+            },
+        )
+        assert response.status_code == 422
+
+    def test_get_single_service_returns_regardless_of_status(self):
+        """GET /api/v1/registry/{callsign} returns service even if deleted."""
+        # Register and delete a service
+        client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "DELETED",
+                "description": "Deleted Service",
+                "service_website": "https://deleted.com",
+                "software": "test 1.0",
+                "status": "deleted",
+            },
+        )
+
+        # Should still be fetchable by callsign
+        get_response = client.get("/api/v1/registry/DELETED")
+        assert get_response.status_code == 200
+        assert get_response.json()["callsign"] == "DELETED"
+        assert get_response.json()["status"] == "deleted"
