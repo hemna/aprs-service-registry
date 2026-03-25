@@ -23,6 +23,49 @@ SECONDS_PER_HOUR = 3600
 _aprsd_initialized = False
 _aprsd_init_lock = threading.Lock()
 
+# Global tracker for received ACKs/responses from services
+# Key: callsign (uppercase), Value: {"timestamp": time.time(), "response": "ACK" or message}
+_received_responses: dict[str, dict] = {}
+_received_responses_lock = threading.Lock()
+
+
+def record_response(callsign: str, response_text: str) -> None:
+    """Record a response (ACK or message) from a service."""
+    with _received_responses_lock:
+        _received_responses[callsign.upper()] = {
+            "timestamp": time.time(),
+            "response": response_text,
+        }
+        LOG.debug(f"Recorded response from {callsign}: {response_text}")
+
+
+def get_recent_response(callsign: str, since_timestamp: float) -> dict | None:
+    """Get a response from a service if received after the given timestamp.
+
+    Args:
+        callsign: The service callsign
+        since_timestamp: Only return responses received after this time
+
+    Returns:
+        Response dict with "timestamp" and "response" keys, or None
+    """
+    with _received_responses_lock:
+        resp = _received_responses.get(callsign.upper())
+        if resp and resp["timestamp"] >= since_timestamp:
+            return resp
+        return None
+
+
+def clear_old_responses(max_age_seconds: int = 300) -> None:
+    """Clear responses older than max_age_seconds."""
+    cutoff = time.time() - max_age_seconds
+    with _received_responses_lock:
+        to_delete = [
+            k for k, v in _received_responses.items() if v["timestamp"] < cutoff
+        ]
+        for k in to_delete:
+            del _received_responses[k]
+
 
 @dataclass
 class HealthCheckResult:
@@ -265,6 +308,9 @@ def send_and_wait_for_response(
 
             An ACK from the target service counts as success - it proves the service
             is alive and received our message.
+
+            We also record ALL ACKs/responses to a global tracker so that late
+            responses can still be counted.
             """
             nonlocal result
 
@@ -279,6 +325,12 @@ def send_and_wait_for_response(
                 pkt_message = getattr(packet, "message_text", "")
                 pkt_response = getattr(packet, "response", "")
                 pkt_msgno = getattr(packet, "msgNo", None)
+
+            # Record ALL ACKs/responses to global tracker (for late arrivals)
+            if pkt_response == "ack":
+                record_response(pkt_from, "ACK")
+            elif pkt_message:
+                record_response(pkt_from, pkt_message)
 
             # Check if this is from our target service
             if pkt_from.upper() != callsign.upper():
@@ -413,6 +465,9 @@ def check_service(callsign: str) -> None:
 
     LOG.info(f"Running health check for {callsign}: sending '{health_check_command}'")
 
+    # Record start time for checking late responses
+    check_start_time = time.time()
+
     # Send message and wait for response
     timeout = CONF.registry.health_check_timeout
     response_text, response_time_ms = send_and_wait_for_response(
@@ -420,6 +475,20 @@ def check_service(callsign: str) -> None:
         health_check_command,
         timeout,
     )
+
+    # If we didn't get a direct response, check the global tracker for late ACKs
+    if response_text is None:
+        late_response = get_recent_response(callsign, check_start_time)
+        if late_response:
+            response_text = late_response["response"]
+            # Calculate approximate response time (from start of check to when recorded)
+            response_time_ms = int(
+                (late_response["timestamp"] - check_start_time) * 1000
+            )
+            LOG.info(
+                f"Found late response from {callsign}: '{response_text}' "
+                f"(arrived after {response_time_ms}ms)"
+            )
 
     # Record result
     if response_text is not None:
