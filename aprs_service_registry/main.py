@@ -1,5 +1,4 @@
 import json
-import logging
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -11,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from loguru import logger
 from oslo_config import cfg
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ from aprs_service_registry.health_checker import (
 )
 
 
-LOG = logging.getLogger(__name__)
+LOG = logger
 CONF = cfg.CONF
 
 _WEB_DIR = Path(__file__).resolve().parent / "web"

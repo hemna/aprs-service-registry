@@ -1,6 +1,5 @@
-import logging
-
 import click
+from loguru import logger
 from oslo_config import cfg
 from uvicorn import Config, Server
 
@@ -11,7 +10,7 @@ from aprs_service_registry import main as registry_main
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
-LOG = logging.getLogger(__name__)
+LOG = logger
 CONF = cfg.CONF
 
 
@@ -30,7 +29,9 @@ def server(ctx):
     """Start the aprs service registry server gateway process."""
     # Dump all the config options now.
     CONF.log_opt_values(LOG, logging.DEBUG)
-    LOG.info(f"APRS Service Registry Started version: {aprs_service_registry.__version__}")
+    LOG.info(
+        f"APRS Service Registry Started version: {aprs_service_registry.__version__}"
+    )
     registry_main.APRSServices().load()
 
     server = Server(

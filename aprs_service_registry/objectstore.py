@@ -1,13 +1,13 @@
-import logging
 import os
 import pathlib
 import pickle
 
+from loguru import logger
 from oslo_config import cfg
 
 
 CONF = cfg.CONF
-LOG = logging.getLogger(__name__)
+LOG = logger
 
 
 class ObjectStoreMixin:

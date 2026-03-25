@@ -1,6 +1,5 @@
 """Health check functionality for APRS services."""
 
-import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -8,12 +7,13 @@ from datetime import datetime, timedelta, timezone
 
 import wrapt
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from loguru import logger
 from oslo_config import cfg
 
 from aprs_service_registry import objectstore
 
 
-LOG = logging.getLogger(__name__)
+LOG = logger
 CONF = cfg.CONF
 
 MAX_RESULTS_PER_SERVICE = 3

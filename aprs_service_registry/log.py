@@ -16,6 +16,15 @@ LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
 }
 
+# Loguru format with colors
+# Level colors: DEBUG=cyan, INFO=green, WARNING=yellow, ERROR=red, CRITICAL=red bold
+LOG_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+    "<level>{message}</level>"
+)
+
 
 class InterceptHandler(logging.Handler):
     def emit(self, record):
@@ -31,10 +40,23 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
 
 
 def setup_logging():
+    # Remove default loguru handler
+    logger.remove()
+
+    # Add colored console handler
+    logger.add(
+        sys.stderr,
+        format=LOG_FORMAT,
+        level=CONF.registry.log_level,
+        colorize=True,
+    )
+
     # intercept everything at the root logger
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(CONF.registry.log_level)
@@ -44,6 +66,3 @@ def setup_logging():
     for name in logging.root.manager.loggerDict.keys():
         logging.getLogger(name).handlers = []
         logging.getLogger(name).propagate = True
-
-    # configure loguru
-    logger.configure(handlers=[{"sink": sys.stdout, "serialize": False}])
