@@ -308,9 +308,9 @@ async def trigger_health_check(callsign: str):
     callsign_upper = callsign.upper()
 
     try:
-        service = services[callsign_upper]
+        _service = services[callsign_upper]  # Just check it exists
         LOG.info(f"Manually triggering health check for {callsign_upper}")
-        check_service(callsign_upper, service)
+        check_service(callsign_upper)
 
         # Return the result
         store = HealthCheckStore()
@@ -341,7 +341,6 @@ async def trigger_all_health_checks():
     Returns immediately with the list of services being checked.
     Results will be available via the /api/v1/registry endpoint.
     """
-    services = APRSServices()
     checkable = get_checkable_services()
 
     LOG.info(f"Manually triggering health checks for {len(checkable)} services")
@@ -349,8 +348,7 @@ async def trigger_all_health_checks():
     results = []
     for callsign in checkable:
         try:
-            service = services[callsign]
-            check_service(callsign, service)
+            check_service(callsign)
 
             store = HealthCheckStore()
             last_result = store.get_last_result(callsign)
