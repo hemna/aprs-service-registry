@@ -262,6 +262,9 @@ def send_and_wait_for_response(
 
             Note: With raw=False, APRSD's consumer returns parsed dicts from aprslib,
             not APRSD packet objects. We handle both formats for robustness.
+
+            An ACK from the target service counts as success - it proves the service
+            is alive and received our message.
             """
             nonlocal result
 
@@ -269,15 +272,32 @@ def send_and_wait_for_response(
             if isinstance(packet, dict):
                 pkt_from = packet.get("from", "")
                 pkt_message = packet.get("message_text", "")
+                pkt_response = packet.get("response", "")  # 'ack' or 'rej'
                 pkt_msgno = packet.get("msgNo")
             else:
                 pkt_from = getattr(packet, "from_call", "")
                 pkt_message = getattr(packet, "message_text", "")
+                pkt_response = getattr(packet, "response", "")
                 pkt_msgno = getattr(packet, "msgNo", None)
 
-            # Check if this is a message from our target (skip ACKs which have no message_text)
-            if pkt_from.upper() == callsign.upper() and pkt_message:
-                elapsed_ms = int((time.time() - start_time) * 1000)
+            # Check if this is from our target service
+            if pkt_from.upper() != callsign.upper():
+                return
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+
+            # ACK from target = service is alive
+            if pkt_response == "ack":
+                result["response_text"] = "ACK"
+                result["response_time_ms"] = elapsed_ms
+                LOG.debug(
+                    f"Received ACK from {callsign} in {elapsed_ms}ms",
+                )
+                stop_event.set()
+                raise StopIteration
+
+            # Message response from target = service is alive
+            if pkt_message:
                 result["response_text"] = pkt_message
                 result["response_time_ms"] = elapsed_ms
                 LOG.debug(
