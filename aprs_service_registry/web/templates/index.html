@@ -68,12 +68,12 @@
                   <td>
                     {% if health_checks[service] %}
                       {% if health_checks[service].success %}
-                        <span class="health-check-success" title="{{ health_checks[service].timestamp }}">
-                          ✓ {{ health_checks[service].response_time_ms }}ms
+                        <span class="health-check-success" title="Response time: {{ health_checks[service].response_time_ms }}ms">
+                          ✓ {{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }} ({{ health_checks[service].response_time_ms }}ms)
                         </span>
                       {% else %}
-                        <span class="health-check-failure" title="{{ health_checks[service].timestamp }}">
-                          ✗ {{ health_checks[service].error }}
+                        <span class="health-check-failure" title="{{ health_checks[service].error }}">
+                          ✗ {{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }}
                         </span>
                       {% endif %}
                     {% else %}
