@@ -16,7 +16,10 @@ from pydantic import BaseModel
 
 from aprs_service_registry import conf, objectstore, utils  # noqa
 from aprs_service_registry.health_checker import (
-    HealthCheckStore, setup_scheduler, start_scheduler, stop_scheduler,
+    HealthCheckStore,
+    setup_scheduler,
+    start_scheduler,
+    stop_scheduler,
 )
 
 
@@ -179,6 +182,7 @@ async def registry(request: registryRequest):
     LOG.info(f"registry: {request}")
     services = APRSServices()
     callsign_upper = request.callsign.upper()
+
     # Create a new model instance with uppercased callsign
     # Use dict() for Pydantic v1 compatibility, model_dump() for v2
     try:
@@ -186,6 +190,29 @@ async def registry(request: registryRequest):
     except AttributeError:
         request_dict = request.dict()
     request_dict["callsign"] = callsign_upper
+
+    # Preserve existing health_check_command and status if not provided in request
+    # This prevents re-registration from overwriting admin-set values
+    if callsign_upper in services.data:
+        existing = services[callsign_upper]
+        try:
+            existing_dict = existing.model_dump()
+        except AttributeError:
+            existing_dict = existing.dict()
+
+        # Preserve health_check_command if not provided in new request
+        if request_dict.get("health_check_command") is None:
+            request_dict["health_check_command"] = existing_dict.get(
+                "health_check_command"
+            )
+
+        # Preserve status if not explicitly changed (don't let re-registration reset deleted)
+        if request_dict.get("status") is None or request_dict.get("status") == "active":
+            existing_status = existing_dict.get("status")
+            if existing_status == "deleted":
+                # Don't allow re-registration to un-delete a service
+                request_dict["status"] = "deleted"
+
     request_upper = registryRequest(**request_dict)
     services.add_and_persist(callsign_upper, request_upper)
     for service in services:
