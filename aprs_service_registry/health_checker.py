@@ -324,15 +324,6 @@ def send_and_wait_for_response(
                 stop_event.set()
                 raise StopIteration
 
-        # Create and send the message
-        LOG.info(f"Sending health check to {callsign}: '{message}'")
-        packet = MessagePacket(
-            from_call=from_call,
-            to_call=callsign.upper(),
-            message_text=message,
-        )
-        tx.send(packet, direct=True)
-
         # Start consumer in a thread to receive response
         client = APRSDClient()
 
@@ -347,13 +338,38 @@ def send_and_wait_for_response(
         consumer_thread = threading.Thread(target=consume, daemon=True)
         consumer_thread.start()
 
-        # Wait for response or timeout
-        stop_event.wait(timeout=timeout)
+        # Send message with retry logic - retry every 30s if no response
+        max_retries = 3
+        retry_interval = 30  # seconds
+
+        for attempt in range(1, max_retries + 1):
+            # Create and send the message
+            packet = MessagePacket(
+                from_call=from_call,
+                to_call=callsign.upper(),
+                message_text=message,
+            )
+            LOG.info(
+                f"Sending health check to {callsign}: '{message}' (attempt {attempt}/{max_retries})"
+            )
+            tx.send(packet, direct=True)
+
+            # Wait for response or retry interval
+            if stop_event.wait(timeout=retry_interval):
+                # Got a response
+                break
+
+            if attempt < max_retries:
+                LOG.debug(
+                    f"No response from {callsign} after {retry_interval}s, retrying..."
+                )
 
         if result["response_text"] is not None:
             return (result["response_text"], result["response_time_ms"])
         else:
-            LOG.warning(f"Health check timeout for {callsign} after {timeout}s")
+            LOG.warning(
+                f"Health check timeout for {callsign} after {max_retries} attempts"
+            )
             return (None, None)
 
     except ImportError as e:
