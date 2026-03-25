@@ -17,6 +17,8 @@ from pydantic import BaseModel
 from aprs_service_registry import conf, objectstore, utils  # noqa
 from aprs_service_registry.health_checker import (
     HealthCheckStore,
+    check_service,
+    get_checkable_services,
     setup_scheduler,
     start_scheduler,
     stop_scheduler,
@@ -297,6 +299,86 @@ async def registry_delete(callsign: str):
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
+
+
+@app.post("/api/v1/health-check/{callsign}", response_class=JSONResponse)
+async def trigger_health_check(callsign: str):
+    """Manually trigger a health check for a specific service."""
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+        LOG.info(f"Manually triggering health check for {callsign_upper}")
+        check_service(callsign_upper, service)
+
+        # Return the result
+        store = HealthCheckStore()
+        last_result = store.get_last_result(callsign_upper)
+        if last_result:
+            return {
+                "status": "ok",
+                "callsign": callsign_upper,
+                "health_check": {
+                    "timestamp": last_result.timestamp.isoformat(),
+                    "success": last_result.success,
+                    "response_time_ms": last_result.response_time_ms,
+                    "error": last_result.error,
+                },
+            }
+        return {"status": "ok", "callsign": callsign_upper, "health_check": None}
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
+
+
+@app.post("/api/v1/health-check", response_class=JSONResponse)
+async def trigger_all_health_checks():
+    """Manually trigger health checks for all active services.
+
+    Returns immediately with the list of services being checked.
+    Results will be available via the /api/v1/registry endpoint.
+    """
+    services = APRSServices()
+    checkable = get_checkable_services()
+
+    LOG.info(f"Manually triggering health checks for {len(checkable)} services")
+
+    results = []
+    for callsign in checkable:
+        try:
+            service = services[callsign]
+            check_service(callsign, service)
+
+            store = HealthCheckStore()
+            last_result = store.get_last_result(callsign)
+            if last_result:
+                results.append(
+                    {
+                        "callsign": callsign,
+                        "success": last_result.success,
+                        "response_time_ms": last_result.response_time_ms,
+                        "error": last_result.error,
+                    }
+                )
+        except Exception as e:
+            LOG.error(f"Error checking {callsign}: {e}")
+            results.append(
+                {
+                    "callsign": callsign,
+                    "success": False,
+                    "response_time_ms": None,
+                    "error": str(e),
+                }
+            )
+
+    return {
+        "status": "ok",
+        "checked": len(results),
+        "results": results,
+    }
 
 
 async def ws_process_balls(msg):
