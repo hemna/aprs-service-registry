@@ -89,19 +89,19 @@
                   {% set num_results = results|length %}
                   {% for i in range(24) %}
                     {% if i < (24 - num_results) %}
-                      <div class="heatmap-dot dot-nodata" title="No data"></div>
+                      <div class="heatmap-dot dot-nodata" data-tooltip="No data"></div>
                     {% else %}
                       {% set idx = i - (24 - num_results) %}
                       {% if results[idx].success %}
                         <div class="heatmap-dot dot-success heatmap-dot-timed" 
                              data-utc="{{ results[idx].timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
                              data-status="Passed"
-                             title="Passed"></div>
+                             data-tooltip="Passed"></div>
                       {% else %}
                         <div class="heatmap-dot dot-failure heatmap-dot-timed"
                              data-utc="{{ results[idx].timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
                              data-status="Failed: {{ results[idx].error or 'Unknown error' }}"
-                             title="Failed"></div>
+                             data-tooltip="Failed"></div>
                       {% endif %}
                     {% endif %}
                   {% endfor %}
@@ -439,9 +439,9 @@ frequency_seconds = 900</code></pre>
           hour12: false
         });
         
-        dot.setAttribute('title', status + ' - ' + timeStr);
+        dot.setAttribute('data-tooltip', status + ' - ' + timeStr);
       } catch (e) {
-        // Keep original title if conversion fails
+        // Keep original tooltip if conversion fails
       }
     });
   }
