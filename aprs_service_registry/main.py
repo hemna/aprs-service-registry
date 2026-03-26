@@ -406,30 +406,28 @@ async def registry_delete(request: Request, callsign: str):
 @app.post("/api/v1/health-check/{callsign}", response_class=JSONResponse)
 @limiter.limit("60/minute")
 async def trigger_health_check(request: Request, callsign: str):
-    """Manually trigger a health check for a specific service."""
+    """Manually trigger a health check for a specific service.
+
+    The health check runs in a background thread and returns immediately.
+    Results will be available via the /api/v1/registry endpoint.
+    """
     services = APRSServices()
     callsign_upper = callsign.upper()
 
     try:
         _service = services[callsign_upper]  # Just check it exists
         LOG.info(f"Manually triggering health check for {callsign_upper}")
-        check_service(callsign_upper)
 
-        # Return the result
-        store = HealthCheckStore()
-        last_result = store.get_last_result(callsign_upper)
-        if last_result:
-            return {
-                "status": "ok",
-                "callsign": callsign_upper,
-                "health_check": {
-                    "timestamp": last_result.timestamp.isoformat(),
-                    "success": last_result.success,
-                    "response_time_ms": last_result.response_time_ms,
-                    "error": last_result.error,
-                },
-            }
-        return {"status": "ok", "callsign": callsign_upper, "health_check": None}
+        # Run in background thread so we don't block the web server
+        thread = threading.Thread(target=check_service, args=(callsign_upper,))
+        thread.daemon = True
+        thread.start()
+
+        return {
+            "status": "ok",
+            "callsign": callsign_upper,
+            "message": "Health check started in background",
+        }
     except KeyError:
         raise HTTPException(
             status_code=404,
@@ -442,44 +440,23 @@ async def trigger_health_check(request: Request, callsign: str):
 async def trigger_all_health_checks(request: Request):
     """Manually trigger health checks for all active services.
 
-    Returns immediately with the list of services being checked.
+    Health checks run in background threads and this returns immediately.
     Results will be available via the /api/v1/registry endpoint.
     """
     checkable = get_checkable_services()
 
     LOG.info(f"Manually triggering health checks for {len(checkable)} services")
 
-    results = []
+    # Start all health checks in background threads
     for callsign in checkable:
-        try:
-            check_service(callsign)
-
-            store = HealthCheckStore()
-            last_result = store.get_last_result(callsign)
-            if last_result:
-                results.append(
-                    {
-                        "callsign": callsign,
-                        "success": last_result.success,
-                        "response_time_ms": last_result.response_time_ms,
-                        "error": last_result.error,
-                    }
-                )
-        except Exception as e:
-            LOG.error(f"Error checking {callsign}: {e}")
-            results.append(
-                {
-                    "callsign": callsign,
-                    "success": False,
-                    "response_time_ms": None,
-                    "error": str(e),
-                }
-            )
+        thread = threading.Thread(target=check_service, args=(callsign,))
+        thread.daemon = True
+        thread.start()
 
     return {
         "status": "ok",
-        "checked": len(results),
-        "results": results,
+        "message": f"Health checks started for {len(checkable)} services in background",
+        "services": checkable,
     }
 
 
