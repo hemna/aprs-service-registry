@@ -18,7 +18,7 @@ CONF = cfg.CONF
 
 MAX_RESULTS_PER_SERVICE = 24
 SECONDS_PER_HOUR = 3600
-PENDING_TO_DOWN_HOURS = 24  # Hours of failures before pending -> down
+CONSECUTIVE_FAILURES_FOR_DOWN = 3  # Consecutive failures before marking as down
 
 
 def calculate_uptime(results: list) -> str:
@@ -499,7 +499,7 @@ def check_service(callsign: str) -> None:
     Status transitions:
     - On SUCCESS: pending/down -> active
     - On FAILURE: active -> pending
-    - On FAILURE (after 24h of failures): pending -> down
+    - On FAILURE (3 consecutive): pending -> down
     """
     from aprs_service_registry.main import APRSServices, registryRequest
 
@@ -588,28 +588,22 @@ def check_service(callsign: str) -> None:
             new_status = "pending"
             LOG.warning(f"Service {callsign}: active -> pending (health check failed)")
         elif current_status == "pending":
-            # Check if we've been failing for 24+ hours
-            # Look at historical results to find when failures started
+            # Check if we've had 3+ consecutive failures (including this one)
+            # Look at historical results to count consecutive failures
             results = store.get_results(callsign.upper())
+            consecutive_failures = 1  # Count current failure
             if results:
-                # Find the first consecutive failure timestamp
-                first_failure_time = None
-                for r in reversed(results):  # Oldest first
+                for r in results:  # Most recent first
                     if r.success:
-                        first_failure_time = None  # Reset on success
-                    elif first_failure_time is None:
-                        first_failure_time = r.timestamp
+                        break  # Stop counting on first success
+                    consecutive_failures += 1
 
-                if first_failure_time:
-                    hours_failing = (
-                        datetime.now(timezone.utc) - first_failure_time
-                    ).total_seconds() / 3600
-                    if hours_failing >= PENDING_TO_DOWN_HOURS:
-                        new_status = "down"
-                        LOG.warning(
-                            f"Service {callsign}: pending -> down "
-                            f"(failing for {hours_failing:.1f} hours)"
-                        )
+            if consecutive_failures >= CONSECUTIVE_FAILURES_FOR_DOWN:
+                new_status = "down"
+                LOG.warning(
+                    f"Service {callsign}: pending -> down "
+                    f"({consecutive_failures} consecutive failures)"
+                )
 
     store.add_and_persist_result(callsign, result)
 
