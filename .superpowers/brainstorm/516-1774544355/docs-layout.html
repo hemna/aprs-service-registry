@@ -1,0 +1,85 @@
+<h2>Documentation Page Layout</h2>
+<p class="subtitle">How should the docs pages be structured?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Top Navigation Bar</h3>
+      <p>Horizontal nav linking all doc pages, content below</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 0;">
+          <div style="background: var(--bg-tertiary); padding: 8px 12px; display: flex; gap: 16px; font-size: 13px; border-bottom: 1px solid var(--border);">
+            <span style="opacity: 0.6;">APRS Registry</span>
+            <span style="margin-left: auto;">About</span>
+            <span style="font-weight: 600; border-bottom: 2px solid var(--accent);">Guide</span>
+            <span>Developers</span>
+            <span>Service Types</span>
+            <span>FAQ</span>
+            <span style="opacity: 0.6;">|</span>
+            <span>Home</span>
+          </div>
+          <div style="padding: 20px;">
+            <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Registering Your Service</div>
+            <div style="font-size: 13px; opacity: 0.7; margin-bottom: 16px;">How to add your APRS service to the registry</div>
+            <div class="placeholder" style="height: 80px;">Content area with sections...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Sidebar Navigation</h3>
+      <p>Left sidebar with doc links, content on right</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 0;">
+          <div style="display: flex;">
+            <div style="width: 140px; background: var(--bg-tertiary); padding: 12px; border-right: 1px solid var(--border); font-size: 12px;">
+              <div style="font-weight: 600; margin-bottom: 8px; opacity: 0.6;">DOCS</div>
+              <div style="margin-bottom: 6px;">About</div>
+              <div style="margin-bottom: 6px; font-weight: 600; color: var(--accent);">Guide</div>
+              <div style="margin-bottom: 6px;">Developers</div>
+              <div style="margin-bottom: 6px;">Service Types</div>
+              <div style="margin-bottom: 6px;">FAQ</div>
+              <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); opacity: 0.6;">Back to Home</div>
+            </div>
+            <div style="flex: 1; padding: 16px;">
+              <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Registering Your Service</div>
+              <div style="font-size: 13px; opacity: 0.7; margin-bottom: 16px;">How to add your APRS service to the registry</div>
+              <div class="placeholder" style="height: 60px;">Content...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Minimal (Content-First)</h3>
+      <p>Simple header with home link, breadcrumb, focus on content</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 0;">
+          <div style="background: var(--bg-tertiary); padding: 10px 16px; display: flex; justify-content: space-between; font-size: 13px; border-bottom: 1px solid var(--border);">
+            <span>APRS Service Registry</span>
+            <span>Home | Docs | API</span>
+          </div>
+          <div style="padding: 20px; max-width: 600px; margin: 0 auto;">
+            <div style="font-size: 12px; opacity: 0.6; margin-bottom: 12px;">Docs / Guide</div>
+            <div style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Registering Your Service</div>
+            <div style="font-size: 13px; opacity: 0.7; margin-bottom: 16px;">How to add your APRS service to the registry</div>
+            <div class="placeholder" style="height: 80px;">Focused content area...</div>
+            <div style="margin-top: 16px; font-size: 12px; display: flex; justify-content: space-between; opacity: 0.6;">
+              <span>← About</span>
+              <span>Developers →</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -126,7 +126,7 @@ All documentation pages share a consistent layout:
 - Quick Start (TL;DR) — fetch all services in 30 seconds
 - API Overview
 - Base URL and Versioning
-  - Base URL: `https://aprs-service-registry.hemna.com`
+  - Base URL: `https://aprs.hemna.com`
   - Version: URL path prefix `/api/v1/`
 - Authentication
   - Currently: **No authentication required** — public API
@@ -158,20 +158,20 @@ Fetch all registered APRS services.
 
 #### curl
 ```bash
-curl https://aprs-service-registry.hemna.com/api/v1/registry
+curl https://aprs.hemna.com/api/v1/registry
 ```
 
 #### Python
 ```python
 import requests
-response = requests.get("https://aprs-service-registry.hemna.com/api/v1/registry")
+response = requests.get("https://aprs.hemna.com/api/v1/registry")
 services = response.json()
 print(services)
 ```
 
 #### JavaScript
 ```javascript
-const response = await fetch("https://aprs-service-registry.hemna.com/api/v1/registry");
+const response = await fetch("https://aprs.hemna.com/api/v1/registry");
 const services = await response.json();
 console.log(services);
 ```
@@ -187,7 +187,7 @@ import (
 )
 
 func main() {
-    resp, err := http.Get("https://aprs-service-registry.hemna.com/api/v1/registry")
+    resp, err := http.Get("https://aprs.hemna.com/api/v1/registry")
     if err != nil {
         panic(err)
     }

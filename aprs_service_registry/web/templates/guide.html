@@ -13,7 +13,7 @@
   <h2>TL;DR</h2>
   <p>Register your service with a single HTTP POST to <code>/api/v1/registry</code> with your callsign, description, and website URL. The registry will automatically check your service's health hourly.</p>
   <div class="code-block">
-    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/registry \
+    <pre><code>curl -X POST https://aprs.hemna.com/api/v1/registry \
   -H "Content-Type: application/json" \
   -d '{"callsign": "MYCALL", "description": "My APRS service", "service_website": "http://example.com", "software": "APRSD 3.3.0"}'</code></pre>
     <button type="button" class="btn-copy" title="Copy">Copy</button>
@@ -89,7 +89,7 @@
 
   <h3>Example Request</h3>
   <div class="code-block">
-    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/registry \
+    <pre><code>curl -X POST https://aprs.hemna.com/api/v1/registry \
   -H "Content-Type: application/json" \
   -d '{
     "callsign": "REPEAT",
@@ -152,7 +152,7 @@ frequency_seconds = 900</code></pre>
   <h3>Manual Health Check</h3>
   <p>You can manually trigger a health check for your service:</p>
   <div class="code-block">
-    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/health-check/YOURCALL</code></pre>
+    <pre><code>curl -X POST https://aprs.hemna.com/api/v1/health-check/YOURCALL</code></pre>
     <button type="button" class="btn-copy" title="Copy">Copy</button>
   </div>
 </section>
@@ -162,7 +162,7 @@ frequency_seconds = 900</code></pre>
   <p>To update your service information, simply POST to the same endpoint with the updated data. The callsign is used as the unique identifier, so any POST with the same callsign will update the existing record.</p>
   
   <div class="code-block">
-    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/registry \
+    <pre><code>curl -X POST https://aprs.hemna.com/api/v1/registry \
   -H "Content-Type: application/json" \
   -d '{
     "callsign": "MYCALL",
@@ -179,7 +179,7 @@ frequency_seconds = 900</code></pre>
   <p>To remove your service from the registry, send a DELETE request:</p>
   
   <div class="code-block">
-    <pre><code>curl -X DELETE https://aprs-service-registry.hemna.com/api/v1/registry/YOURCALL</code></pre>
+    <pre><code>curl -X DELETE https://aprs.hemna.com/api/v1/registry/YOURCALL</code></pre>
     <button type="button" class="btn-copy" title="Copy">Copy</button>
   </div>
   
