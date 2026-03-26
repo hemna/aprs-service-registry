@@ -56,11 +56,13 @@
               </thead>
               <tbody>
                 {% for service in services %}
-                <tr{% if services[service].status == 'down' %} class="service-down"{% endif %}>
+                <tr{% if services[service].status in ['down', 'pending'] %} class="service-{{ services[service].status }}"{% endif %}>
                   <td><span class="callsign">{{ service }}</span></td>
                   <td>
                     {% if services[service].status == 'down' %}
-                      <span class="badge bg-warning text-dark">DOWN</span>
+                      <span class="badge bg-danger">Down</span>
+                    {% elif services[service].status == 'pending' %}
+                      <span class="badge bg-warning text-dark">Pending</span>
                     {% else %}
                       <span class="badge bg-success">Active</span>
                     {% endif %}
