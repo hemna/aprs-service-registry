@@ -13,6 +13,9 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 from oslo_config import cfg
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from aprs_service_registry import conf, objectstore, utils  # noqa
 from aprs_service_registry.health_checker import (
@@ -32,6 +35,9 @@ LOG = logger
 CONF = cfg.CONF
 
 _WEB_DIR = Path(__file__).resolve().parent / "web"
+
+# Rate limiter: 60 requests per minute per IP for API endpoints
+limiter = Limiter(key_func=get_remote_address)
 
 
 def service_to_dict(service) -> dict:
@@ -96,6 +102,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
@@ -269,18 +277,19 @@ async def faq_page(request: Request):
 
 
 @app.post("/api/v1/registry", response_class=JSONResponse)
-async def registry(request: registryRequest):
+@limiter.limit("60/minute")
+async def registry(request: Request, data: registryRequest):
     """Register a service with the registry and/or update."""
-    LOG.info(f"registry: {request}")
+    LOG.info(f"registry: {data}")
     services = APRSServices()
-    callsign_upper = request.callsign.upper()
+    callsign_upper = data.callsign.upper()
 
     # Create a new model instance with uppercased callsign
     # Use dict() for Pydantic v1 compatibility, model_dump() for v2
     try:
-        request_dict = request.model_dump()
+        request_dict = data.model_dump()
     except AttributeError:
-        request_dict = request.dict()
+        request_dict = data.dict()
     request_dict["callsign"] = callsign_upper
 
     # Preserve existing health_check_command and status if not provided in request
@@ -315,7 +324,9 @@ async def registry(request: registryRequest):
 
 
 @app.get("/api/v1/registry", response_class=JSONResponse)
+@limiter.limit("60/minute")
 async def get_all_services(
+    request: Request,
     include_down: bool = False,
     include_deleted: bool = False,
     include_all: bool = False,
@@ -348,7 +359,8 @@ async def get_all_services(
 
 
 @app.get("/api/v1/registry/{callsign}", response_class=JSONResponse)
-async def get_service(callsign: str):
+@limiter.limit("60/minute")
+async def get_service(request: Request, callsign: str):
     """Get a single service by callsign."""
     services = APRSServices()
     callsign_upper = callsign.upper()
@@ -366,7 +378,8 @@ async def get_service(callsign: str):
 
 
 @app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
-async def registry_delete(callsign: str):
+@limiter.limit("60/minute")
+async def registry_delete(request: Request, callsign: str):
     """Soft delete a service (set status to deleted)."""
     services = APRSServices()
     callsign_upper = callsign.upper()
@@ -391,7 +404,8 @@ async def registry_delete(callsign: str):
 
 
 @app.post("/api/v1/health-check/{callsign}", response_class=JSONResponse)
-async def trigger_health_check(callsign: str):
+@limiter.limit("60/minute")
+async def trigger_health_check(request: Request, callsign: str):
     """Manually trigger a health check for a specific service."""
     services = APRSServices()
     callsign_upper = callsign.upper()
@@ -424,7 +438,8 @@ async def trigger_health_check(callsign: str):
 
 
 @app.post("/api/v1/health-check", response_class=JSONResponse)
-async def trigger_all_health_checks():
+@limiter.limit("60/minute")
+async def trigger_all_health_checks(request: Request):
     """Manually trigger health checks for all active services.
 
     Returns immediately with the list of services being checked.

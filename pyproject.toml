@@ -29,6 +29,7 @@ dependencies = [
     "jinja2",
     "loguru",
     "oslo.config",
+    "slowapi",
     "typing-inspect",
     "uvicorn",
     "wrapt",

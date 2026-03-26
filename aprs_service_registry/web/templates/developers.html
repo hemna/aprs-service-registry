@@ -43,7 +43,9 @@
 
 <section class="docs-section">
   <h2>Rate Limits</h2>
-  <p><strong>No rate limits</strong> are currently enforced. However, we ask that you be reasonable with your request frequency:</p>
+  <p>Rate limit: <strong>60 requests per minute</strong> per IP address.</p>
+  <p>Exceeding this limit returns HTTP <code>429 Too Many Requests</code> with a <code>Retry-After</code> header indicating how many seconds to wait before retrying.</p>
+  <p>Best practices:</p>
   <ul>
     <li>Cache responses where appropriate</li>
     <li>Avoid polling more frequently than once per minute for real-time applications</li>
