@@ -183,12 +183,17 @@ async def get(request: Request):
             # Get all health check results for heatmap
             health_results[callsign] = store.get_results(callsign)
 
+    # Sort services alphabetically by callsign
+    sorted_services = dict(
+        sorted(filtered_services.items(), key=lambda x: x[0].upper())
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "request": request,
-            "services": filtered_services,
+            "services": sorted_services,
             "health_results": health_results,
             "calculate_uptime": calculate_uptime,
         },
@@ -214,12 +219,17 @@ async def services_page(request: Request):
             filtered_services[callsign] = service
             health_checks[callsign] = store.get_last_result(callsign)
 
+    # Sort services alphabetically by callsign
+    sorted_services = dict(
+        sorted(filtered_services.items(), key=lambda x: x[0].upper())
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="services.html",
         context={
             "request": request,
-            "services": filtered_services,
+            "services": sorted_services,
             "health_checks": health_checks,
         },
     )
