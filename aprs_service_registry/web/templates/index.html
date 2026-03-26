@@ -150,6 +150,12 @@
                   <span class="detail-value local-time" data-utc="{{ service.updated_at.strftime('%Y-%m-%dT%H:%M:%SZ') if service.updated_at else '' }}">{{ service.updated_at.strftime('%Y-%m-%d %H:%M') if service.updated_at else '--' }} UTC</span>
                 </div>
                 {% endif %}
+                {% if service.service_website %}
+                <div class="detail-row">
+                  <span class="detail-label">Website:</span>
+                  <span class="detail-value"><a href="{{ service.service_website }}" class="link-external" target="_blank" rel="noopener" onclick="event.stopPropagation()">{{ service.service_website }}</a></span>
+                </div>
+                {% endif %}
                 
                 {% set results = health_results.get(callsign, []) %}
                 {% if results %}
