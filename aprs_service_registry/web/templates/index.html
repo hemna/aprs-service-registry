@@ -39,6 +39,12 @@
         </div>
         <p class="section-desc">A list of known APRS services so operators can find them quickly.</p>
 
+        <div class="status-legend">
+          <span class="legend-item"><span class="badge bg-success">Active</span> Service is responding to health checks</span>
+          <span class="legend-item"><span class="badge bg-warning text-dark">Pending</span> Service recently failed health checks (may be temporarily unavailable)</span>
+          <span class="legend-item"><span class="badge bg-danger">Down</span> Service has been unresponsive for 24+ hours</span>
+        </div>
+
         <div class="table-card">
           {% if services|length > 0 %}
           <div class="table-responsive">
