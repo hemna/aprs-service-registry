@@ -73,17 +73,18 @@ class TestHealthCheckStore:
         assert len(results) == 1
         assert results[0].success is True
 
-    def test_keeps_only_last_3_results(self):
-        """Store keeps only the last 3 results per service."""
+    def test_keeps_only_last_24_results(self):
+        """Store keeps only the last 24 results per service."""
         from aprs_service_registry.health_checker import (
             HealthCheckResult,
             HealthCheckStore,
+            MAX_RESULTS_PER_SERVICE,
         )
 
         store = HealthCheckStore()
 
-        # Add 5 results
-        for i in range(5):
+        # Add more than MAX_RESULTS_PER_SERVICE results
+        for i in range(30):
             result = HealthCheckResult(
                 timestamp=datetime.now(timezone.utc),
                 success=True,
@@ -94,10 +95,10 @@ class TestHealthCheckStore:
             store.add_result("TESTCALL", result)
 
         results = store.get_results("TESTCALL")
-        assert len(results) == 3
+        assert len(results) == MAX_RESULTS_PER_SERVICE
         # Most recent should be first
-        assert results[0].response_text == "Response 4"
-        assert results[2].response_text == "Response 2"
+        assert results[0].response_text == "Response 29"
+        assert results[-1].response_text == f"Response {30 - MAX_RESULTS_PER_SERVICE}"
 
     def test_get_last_result(self):
         """Can get the most recent result for a service."""

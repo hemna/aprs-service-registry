@@ -16,7 +16,7 @@ from aprs_service_registry import objectstore
 LOG = logger
 CONF = cfg.CONF
 
-MAX_RESULTS_PER_SERVICE = 3
+MAX_RESULTS_PER_SERVICE = 24
 SECONDS_PER_HOUR = 3600
 PENDING_TO_DOWN_HOURS = 24  # Hours of failures before pending -> down
 
