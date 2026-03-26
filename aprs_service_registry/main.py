@@ -184,6 +184,36 @@ async def get(request: Request):
     )
 
 
+@app.get("/services", response_class=HTMLResponse, include_in_schema=False)
+async def services_page(request: Request):
+    """Render the table view of services (moved from index)."""
+    services = APRSServices()
+    all_services = services.get_all()
+    store = HealthCheckStore()
+
+    # Filter for website: show active, pending and down, hide deleted
+    filtered_services = {}
+    health_checks = {}
+
+    for callsign, service in all_services.items():
+        service_dict = service_to_dict(service)
+        status = service_dict["status"]
+
+        if status in ("active", "pending", "down"):
+            filtered_services[callsign] = service
+            health_checks[callsign] = store.get_last_result(callsign)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="services.html",
+        context={
+            "request": request,
+            "services": filtered_services,
+            "health_checks": health_checks,
+        },
+    )
+
+
 @app.post("/api/v1/registry", response_class=JSONResponse)
 async def registry(request: registryRequest):
     """Register a service with the registry and/or update."""
