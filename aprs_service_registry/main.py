@@ -242,9 +242,8 @@ async def get_all_services(
     store = HealthCheckStore()
 
     # Determine which statuses to include
-    allowed_statuses = {"active"}
-    if include_down or include_all:
-        allowed_statuses.add("down")
+    # By default, show active, pending, and down (everything except deleted)
+    allowed_statuses = {"active", "pending", "down"}
     if include_deleted or include_all:
         allowed_statuses.add("deleted")
 

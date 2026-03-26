@@ -231,6 +231,16 @@ class TestStatusFiltering:
             ),
         )
         services.add(
+            "PENDING1",
+            registryRequest(
+                callsign="PENDING1",
+                description="Pending service",
+                service_website="https://pending.com",
+                software="test",
+                status="pending",
+            ),
+        )
+        services.add(
             "DELETED1",
             registryRequest(
                 callsign="DELETED1",
@@ -241,42 +251,33 @@ class TestStatusFiltering:
             ),
         )
 
-    def test_default_returns_active_only(self):
-        """Default GET returns only active services."""
+    def test_default_returns_active_pending_and_down(self):
+        """Default GET returns active, pending, and down services (not deleted)."""
         response = client.get("/api/v1/registry")
         assert response.status_code == 200
         data = response.json()
 
-        assert data["count"] == 2
+        assert data["count"] == 4
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
         assert "ACTIVE2" in callsigns
-        assert "DOWN1" not in callsigns
-        assert "DELETED1" not in callsigns
-
-    def test_include_down(self):
-        """include_down=true returns active + down services."""
-        response = client.get("/api/v1/registry?include_down=true")
-        assert response.status_code == 200
-        data = response.json()
-
-        assert data["count"] == 3
-        callsigns = [s["callsign"] for s in data["services"]]
-        assert "ACTIVE1" in callsigns
+        assert "PENDING1" in callsigns
         assert "DOWN1" in callsigns
         assert "DELETED1" not in callsigns
 
     def test_include_deleted(self):
-        """include_deleted=true returns active + deleted services."""
+        """include_deleted=true returns all services including deleted."""
         response = client.get("/api/v1/registry?include_deleted=true")
         assert response.status_code == 200
         data = response.json()
 
-        assert data["count"] == 3
+        assert data["count"] == 5
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
+        assert "ACTIVE2" in callsigns
+        assert "PENDING1" in callsigns
+        assert "DOWN1" in callsigns
         assert "DELETED1" in callsigns
-        assert "DOWN1" not in callsigns
 
     def test_include_all(self):
         """include_all=true returns all services."""
@@ -284,20 +285,13 @@ class TestStatusFiltering:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["count"] == 4
+        assert data["count"] == 5
         callsigns = [s["callsign"] for s in data["services"]]
         assert "ACTIVE1" in callsigns
         assert "ACTIVE2" in callsigns
+        assert "PENDING1" in callsigns
         assert "DOWN1" in callsigns
         assert "DELETED1" in callsigns
-
-    def test_combined_flags(self):
-        """Multiple flags are additive."""
-        response = client.get("/api/v1/registry?include_down=true&include_deleted=true")
-        assert response.status_code == 200
-        data = response.json()
-
-        assert data["count"] == 4
 
 
 class TestSoftDelete:
@@ -431,7 +425,8 @@ class TestHealthCheckInResponse:
         from datetime import timezone
 
         from aprs_service_registry.health_checker import (
-            HealthCheckResult, HealthCheckStore,
+            HealthCheckResult,
+            HealthCheckStore,
         )
 
         # Add service
@@ -496,7 +491,8 @@ class TestHealthCheckInResponse:
         from datetime import timezone
 
         from aprs_service_registry.health_checker import (
-            HealthCheckResult, HealthCheckStore,
+            HealthCheckResult,
+            HealthCheckStore,
         )
 
         services = APRSServices()
