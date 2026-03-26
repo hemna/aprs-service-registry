@@ -95,11 +95,11 @@
                     {% if health_checks[service] %}
                       {% if health_checks[service].success %}
                         <span class="health-check-success" title="Response time: {{ health_checks[service].response_time_ms }}ms">
-                          ✓ {{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }} ({{ health_checks[service].response_time_ms }}ms)
+                          ✓ <span class="local-time" data-utc="{{ health_checks[service].timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }} UTC</span> ({{ health_checks[service].response_time_ms }}ms)
                         </span>
                       {% else %}
                         <span class="health-check-failure" title="{{ health_checks[service].error }}">
-                          ✗ {{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }}
+                          ✗ <span class="local-time" data-utc="{{ health_checks[service].timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }} UTC</span>
                         </span>
                       {% endif %}
                     {% else %}
@@ -311,6 +311,44 @@ frequency_seconds = 900</code></pre>
       localStorage.setItem('theme', newTheme);
     });
   }
+
+  // Convert UTC timestamps to local time
+  function convertTimestamps() {
+    document.querySelectorAll('.local-time').forEach(function(el) {
+      var utc = el.getAttribute('data-utc');
+      if (!utc) return;
+      
+      try {
+        var date = new Date(utc);
+        if (isNaN(date.getTime())) return;
+        
+        var format = el.getAttribute('data-format');
+        var options;
+        
+        if (format === 'time') {
+          // Just show time (HH:MM)
+          options = { hour: '2-digit', minute: '2-digit', hour12: false };
+        } else {
+          // Show date and time
+          options = { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false
+          };
+        }
+        
+        el.textContent = date.toLocaleString(undefined, options);
+      } catch (e) {
+        // Keep original text if conversion fails
+      }
+    });
+  }
+  
+  // Run on page load
+  convertTimestamps();
 })();
   </script>
 </body>
