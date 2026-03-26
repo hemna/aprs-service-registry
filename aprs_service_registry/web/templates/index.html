@@ -63,9 +63,34 @@
         </div>
 
         {% if services|length > 0 %}
-        <div class="row g-4">
+        <!-- Sort and Filter Controls -->
+        <div class="controls-toolbar">
+          <div class="controls-group">
+            <label for="sort-select" class="controls-label">Sort by:</label>
+            <select id="sort-select" class="controls-select">
+              <option value="callsign-asc" selected>Callsign (A-Z)</option>
+              <option value="callsign-desc">Callsign (Z-A)</option>
+              <option value="status-asc">Status (Active first)</option>
+              <option value="status-desc">Status (Down first)</option>
+            </select>
+          </div>
+          <div class="controls-group">
+            <span class="controls-label">Filter:</span>
+            <div class="filter-buttons">
+              <button type="button" class="filter-btn active" data-filter="all">All</button>
+              <button type="button" class="filter-btn" data-filter="active">Active</button>
+              <button type="button" class="filter-btn" data-filter="pending">Pending</button>
+              <button type="button" class="filter-btn" data-filter="down">Down</button>
+            </div>
+          </div>
+          <div class="controls-count">
+            <span id="visible-count">{{ services|length }}</span> of {{ services|length }} services
+          </div>
+        </div>
+
+        <div class="row g-4" id="services-grid">
           {% for callsign, service in services.items() %}
-          <div class="col-12 col-md-6 col-lg-4">
+          <div class="col-12 col-md-6 col-lg-4 service-col" data-callsign="{{ callsign }}" data-status="{{ service.status or 'active' }}">
             <div class="service-card p-3" tabindex="0" onclick="toggleCard(this)" onkeydown="handleCardKeydown(event, this)">
               <!-- Card header with callsign and status badge -->
               <div class="card-header-section">
@@ -454,6 +479,99 @@ frequency_seconds = 900</code></pre>
   
   // Run on page load
   convertTimestamps();
+
+  // ---- Sort and Filter Logic ----
+  var sortSelect = document.getElementById('sort-select');
+  var filterButtons = document.querySelectorAll('.filter-btn');
+  var grid = document.getElementById('services-grid');
+  var visibleCountEl = document.getElementById('visible-count');
+  var currentFilter = 'all';
+
+  // Status priority for sorting (lower = higher priority for "active first")
+  var statusPriority = { 'active': 1, 'pending': 2, 'down': 3 };
+
+  function getServiceCols() {
+    return Array.from(grid.querySelectorAll('.service-col'));
+  }
+
+  function updateVisibleCount() {
+    var cols = getServiceCols();
+    var visible = cols.filter(function(col) {
+      return col.style.display !== 'none';
+    }).length;
+    if (visibleCountEl) {
+      visibleCountEl.textContent = visible;
+    }
+  }
+
+  function applyFilter() {
+    var cols = getServiceCols();
+    cols.forEach(function(col) {
+      var status = col.getAttribute('data-status') || 'active';
+      if (currentFilter === 'all' || status === currentFilter) {
+        col.style.display = '';
+      } else {
+        col.style.display = 'none';
+      }
+    });
+    updateVisibleCount();
+  }
+
+  function applySort() {
+    if (!sortSelect || !grid) return;
+    
+    var value = sortSelect.value;
+    var cols = getServiceCols();
+    
+    cols.sort(function(a, b) {
+      var callA = (a.getAttribute('data-callsign') || '').toUpperCase();
+      var callB = (b.getAttribute('data-callsign') || '').toUpperCase();
+      var statusA = a.getAttribute('data-status') || 'active';
+      var statusB = b.getAttribute('data-status') || 'active';
+      
+      switch (value) {
+        case 'callsign-asc':
+          return callA.localeCompare(callB);
+        case 'callsign-desc':
+          return callB.localeCompare(callA);
+        case 'status-asc':
+          // Active first, then pending, then down; tie-break by callsign
+          var diff = (statusPriority[statusA] || 99) - (statusPriority[statusB] || 99);
+          return diff !== 0 ? diff : callA.localeCompare(callB);
+        case 'status-desc':
+          // Down first, then pending, then active; tie-break by callsign
+          var diff = (statusPriority[statusB] || 99) - (statusPriority[statusA] || 99);
+          return diff !== 0 ? diff : callA.localeCompare(callB);
+        default:
+          return 0;
+      }
+    });
+    
+    // Re-append in sorted order
+    cols.forEach(function(col) {
+      grid.appendChild(col);
+    });
+  }
+
+  // Event listeners
+  if (sortSelect) {
+    sortSelect.addEventListener('change', function() {
+      applySort();
+    });
+  }
+
+  filterButtons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      // Update active state
+      filterButtons.forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      
+      currentFilter = btn.getAttribute('data-filter');
+      applyFilter();
+    });
+  });
+
+  // Initial state is already correct (sorted A-Z, showing all)
 })();
   </script>
 </body>
