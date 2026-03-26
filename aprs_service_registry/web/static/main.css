@@ -18,6 +18,35 @@
   --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --transition: 0.2s ease;
+  
+  /* Code block colors (light mode) */
+  --code-bg: #1e293b;
+  --code-text: #e2e8f0;
+  --code-btn-bg: rgba(255, 255, 255, 0.08);
+  --code-btn-border: rgba(255, 255, 255, 0.12);
+  --code-btn-text: #94a3b8;
+}
+
+/* Dark mode */
+[data-theme="dark"] {
+  --bg: #0f172a;
+  --bg-elevated: #1e293b;
+  --border: #334155;
+  --border-strong: #475569;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-soft: rgba(45, 212, 191, 0.15);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  
+  /* Code block colors (dark mode - lighter to contrast) */
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+  --code-btn-bg: rgba(255, 255, 255, 0.1);
+  --code-btn-border: rgba(255, 255, 255, 0.15);
+  --code-btn-text: #cbd5e1;
 }
 
 * {
@@ -355,7 +384,7 @@ main {
 /* ---- Code blocks ---- */
 .code-block {
   position: relative;
-  background: #1e293b;
+  background: var(--code-bg);
   border-radius: var(--radius-sm);
   overflow: hidden;
   margin-bottom: 0.75rem;
@@ -372,7 +401,7 @@ main {
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.5;
-  color: #e2e8f0;
+  color: var(--code-text);
 }
 
 .code-block pre code {
@@ -389,9 +418,9 @@ main {
   font-size: 0.75rem;
   font-weight: 500;
   font-family: var(--font-sans);
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--code-btn-text);
+  background: var(--code-btn-bg);
+  border: 1px solid var(--code-btn-border);
   border-radius: 4px;
   cursor: pointer;
   transition: color var(--transition), background var(--transition), border-color var(--transition);
@@ -757,6 +786,55 @@ main {
 .nav-link--active {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+  color: var(--text-muted);
+}
+
+.theme-toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover svg {
+  transform: rotate(15deg);
+}
+
+/* Hide/show icons based on theme */
+.theme-toggle .icon-sun {
+  display: none;
+}
+
+.theme-toggle .icon-moon {
+  display: block;
+}
+
+[data-theme="dark"] .theme-toggle .icon-sun {
+  display: block;
+}
+
+[data-theme="dark"] .theme-toggle .icon-moon {
+  display: none;
 }
 
 /* Responsive heatmap */
