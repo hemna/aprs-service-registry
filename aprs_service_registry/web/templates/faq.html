@@ -72,7 +72,7 @@
     <p>When health checks fail, your service status changes:</p>
     <ol>
       <li><strong>First failure:</strong> Status changes from "active" to "pending"</li>
-      <li><strong>Continued failures:</strong> After 24 hours of failures, status changes to "down"</li>
+      <li><strong>Continued failures:</strong> After 3 consecutive failures, status changes to "down"</li>
       <li><strong>Recovery:</strong> When a health check passes, status returns to "active"</li>
     </ol>
     <p>Services are never automatically deleted due to health check failures.</p>
