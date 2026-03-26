@@ -573,3 +573,199 @@ main {
     font-size: 0.7rem;
   }
 }
+
+/* ---- Service Cards ---- */
+.service-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+
+.service-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.service-card:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.service-card.expanded {
+  box-shadow: var(--shadow-md);
+}
+
+.card-header-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.service-card .callsign {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-active {
+  background-color: rgba(40, 167, 69, 0.15);
+  color: #198754;
+}
+
+.status-pending {
+  background-color: rgba(255, 193, 7, 0.15);
+  color: #856404;
+}
+
+.status-down {
+  background-color: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+}
+
+.service-card .description {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.service-card .description.truncated {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Heatmap */
+.heatmap-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.heatmap {
+  display: flex;
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+
+.heatmap-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-success {
+  background-color: #198754;
+}
+
+.dot-failure {
+  background-color: #dc3545;
+}
+
+.dot-nodata {
+  background-color: #d0d0d0;
+}
+
+.uptime {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.website-link {
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+}
+
+.website-link:hover {
+  text-decoration: underline;
+  color: var(--accent-hover);
+}
+
+/* Expanded card details */
+.expanded-details {
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.detail-label {
+  color: var(--text-muted);
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.health-log {
+  margin-top: 1rem;
+}
+
+.health-log-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text);
+}
+
+.health-log-item {
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.check-success {
+  color: #198754;
+  font-weight: bold;
+}
+
+.check-failure {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Active nav link */
+.nav-link--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Responsive heatmap */
+@media (max-width: 768px) {
+  .heatmap-dot {
+    width: 8px;
+    height: 8px;
+  }
+  .heatmap {
+    gap: 2px;
+  }
+}

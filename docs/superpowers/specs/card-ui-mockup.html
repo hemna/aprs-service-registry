@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APRS Service Registry - Card UI Mockup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --status-active: #28a745;
+            --status-pending: #ffc107;
+            --status-down: #dc3545;
+            --text-muted: #6c757d;
+            --card-bg: #ffffff;
+            --card-border: #dee2e6;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            padding: 2rem 0;
+        }
+        
+        .service-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        
+        .service-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .service-card.expanded {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .card-header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        
+        .callsign {
+            font-size: 1.25rem;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+            color: #333;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-active {
+            background-color: rgba(40, 167, 69, 0.15);
+            color: var(--status-active);
+        }
+        
+        .status-pending {
+            background-color: rgba(255, 193, 7, 0.15);
+            color: #856404;
+        }
+        
+        .status-down {
+            background-color: rgba(220, 53, 69, 0.15);
+            color: var(--status-down);
+        }
+        
+        .description {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+        
+        .description.truncated {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .heatmap-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        .heatmap {
+            display: flex;
+            gap: 3px;
+            flex-wrap: nowrap;
+        }
+        
+        .heatmap-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .dot-success {
+            background-color: var(--status-active);
+        }
+        
+        .dot-failure {
+            background-color: var(--status-down);
+        }
+        
+        .dot-nodata {
+            background-color: #d0d0d0;
+        }
+        
+        .uptime {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #333;
+            white-space: nowrap;
+        }
+        
+        .website-link {
+            font-size: 0.85rem;
+            color: #0066cc;
+            text-decoration: none;
+        }
+        
+        .website-link:hover {
+            text-decoration: underline;
+        }
+        
+        .expanded-details {
+            border-top: 1px solid #eee;
+            margin-top: 1rem;
+            padding-top: 1rem;
+        }
+        
+        .detail-row {
+            display: flex;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+        }
+        
+        .detail-label {
+            color: #666;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        
+        .detail-value {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .health-log {
+            margin-top: 1rem;
+        }
+        
+        .health-log-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .health-log-item {
+            font-size: 0.8rem;
+            padding: 0.25rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .check-icon {
+            font-size: 0.75rem;
+        }
+        
+        .check-success {
+            color: var(--status-active);
+        }
+        
+        .check-failure {
+            color: var(--status-down);
+        }
+        
+        .nav-tabs-custom {
+            margin-bottom: 2rem;
+        }
+        
+        .nav-tabs-custom .nav-link {
+            color: #666;
+            border: none;
+            padding: 0.5rem 1.5rem;
+        }
+        
+        .nav-tabs-custom .nav-link.active {
+            color: #0066cc;
+            border-bottom: 2px solid #0066cc;
+            background: transparent;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .heatmap-dot {
+                width: 8px;
+                height: 8px;
+            }
+            .heatmap {
+                gap: 2px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>APRS Service Registry</h1>
+        <p class="subtitle">Automated Position Reporting System Services Directory</p>
+        
+        <!-- Navigation -->
+        <ul class="nav nav-tabs-custom">
+            <li class="nav-item">
+                <a class="nav-link active" href="#">Cards</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#">Table</a>
+            </li>
+        </ul>
+        
+        <!-- Card Grid -->
+        <div class="row g-4">
+            <!-- Card 1: Active service, good uptime -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="service-card p-3" onclick="toggleCard(this)">
+                    <div class="card-header-section">
+                        <span class="callsign">WXBOT-10</span>
+                        <span class="status-badge status-active">Active</span>
+                    </div>
+                    <p class="description truncated">Weather information service providing current conditions, forecasts, and alerts for amateur radio operators.</p>
+                    <div class="heatmap-container">
+                        <div class="heatmap">
+                            <!-- 24 dots: mostly green, one red, some gray -->
+                            <div class="heatmap-dot dot-success" title="Hour 1: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 2: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 3: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 4: passed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 5: failed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 6: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 7: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 8: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 9: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 10: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 11: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 12: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 13: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 14: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 15: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 16: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 17: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 18: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 19: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 20: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 21: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 22: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 23: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 24: passed"></div>
+                        </div>
+                        <span class="uptime">96%</span>
+                    </div>
+                    <a href="#" class="website-link" onclick="event.stopPropagation()">https://wxbot.example.com</a>
+                    
+                    <!-- Expanded details (hidden by default) -->
+                    <div class="expanded-details" style="display: none;">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">Weather Service</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Frequency:</span>
+                            <span class="detail-value">144.390 MHz</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">SSID:</span>
+                            <span class="detail-value">-10</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Registered:</span>
+                            <span class="detail-value">2025-01-15</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Check:</span>
+                            <span class="detail-value">2026-03-26 14:32 UTC</span>
+                        </div>
+                        <div class="health-log">
+                            <div class="health-log-title">Recent Health Checks:</div>
+                            <div class="health-log-item">
+                                <span class="check-icon check-success">&#10003;</span>
+                                <span>14:32 - OK</span>
+                            </div>
+                            <div class="health-log-item">
+                                <span class="check-icon check-success">&#10003;</span>
+                                <span>13:32 - OK</span>
+                            </div>
+                            <div class="health-log-item">
+                                <span class="check-icon check-failure">&#10007;</span>
+                                <span>12:32 - Timeout</span>
+                            </div>
+                            <div class="health-log-item">
+                                <span class="check-icon check-success">&#10003;</span>
+                                <span>11:32 - OK</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Card 2: Pending service -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="service-card p-3" onclick="toggleCard(this)">
+                    <div class="card-header-section">
+                        <span class="callsign">EMAIL-2</span>
+                        <span class="status-badge status-pending">Pending</span>
+                    </div>
+                    <p class="description truncated">Email gateway service for sending and receiving email via APRS messaging system.</p>
+                    <div class="heatmap-container">
+                        <div class="heatmap">
+                            <!-- Mixed results - service having issues -->
+                            <div class="heatmap-dot dot-success" title="Hour 1: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 2: passed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 3: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 4: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 5: failed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 6: passed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 7: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 8: failed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 9: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 10: passed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 11: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 12: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 13: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 14: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 15: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 16: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 17: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 18: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 19: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 20: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 21: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 22: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 23: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 24: failed"></div>
+                        </div>
+                        <span class="uptime">25%</span>
+                    </div>
+                    <a href="#" class="website-link" onclick="event.stopPropagation()">https://email.aprs.net</a>
+                    
+                    <div class="expanded-details" style="display: none;">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">Email Gateway</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Frequency:</span>
+                            <span class="detail-value">144.390 MHz</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">SSID:</span>
+                            <span class="detail-value">-2</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Registered:</span>
+                            <span class="detail-value">2024-06-20</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Check:</span>
+                            <span class="detail-value">2026-03-26 14:15 UTC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Card 3: Down service -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="service-card p-3" onclick="toggleCard(this)">
+                    <div class="card-header-section">
+                        <span class="callsign">APRSFI-15</span>
+                        <span class="status-badge status-down">Down</span>
+                    </div>
+                    <p class="description truncated">APRS.fi gateway service providing integration with the aprs.fi tracking platform.</p>
+                    <div class="heatmap-container">
+                        <div class="heatmap">
+                            <!-- All failures -->
+                            <div class="heatmap-dot dot-failure" title="Hour 1: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 2: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 3: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 4: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 5: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 6: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 7: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 8: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 9: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 10: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 11: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 12: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 13: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 14: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 15: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 16: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 17: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 18: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 19: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 20: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 21: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 22: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 23: failed"></div>
+                            <div class="heatmap-dot dot-failure" title="Hour 24: failed"></div>
+                        </div>
+                        <span class="uptime">0%</span>
+                    </div>
+                    <a href="#" class="website-link" onclick="event.stopPropagation()">https://aprs.fi</a>
+                    
+                    <div class="expanded-details" style="display: none;">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">Tracking Gateway</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Frequency:</span>
+                            <span class="detail-value">144.390 MHz</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">SSID:</span>
+                            <span class="detail-value">-15</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Registered:</span>
+                            <span class="detail-value">2023-11-02</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Check:</span>
+                            <span class="detail-value">2026-03-26 14:45 UTC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Card 4: New service with partial data -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="service-card p-3" onclick="toggleCard(this)">
+                    <div class="card-header-section">
+                        <span class="callsign">SMSGTE-5</span>
+                        <span class="status-badge status-active">Active</span>
+                    </div>
+                    <p class="description truncated">SMS gateway allowing APRS users to send and receive text messages to mobile phones.</p>
+                    <div class="heatmap-container">
+                        <div class="heatmap">
+                            <!-- New service - only has 6 checks so far -->
+                            <div class="heatmap-dot dot-nodata" title="Hour 1: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 2: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 3: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 4: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 5: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 6: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 7: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 8: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 9: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 10: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 11: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 12: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 13: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 14: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 15: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 16: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 17: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 18: no data"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 19: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 20: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 21: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 22: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 23: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 24: passed"></div>
+                        </div>
+                        <span class="uptime">100%</span>
+                    </div>
+                    <a href="#" class="website-link" onclick="event.stopPropagation()">https://smsgte.wl2k.net</a>
+                    
+                    <div class="expanded-details" style="display: none;">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">SMS Gateway</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Frequency:</span>
+                            <span class="detail-value">144.390 MHz</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">SSID:</span>
+                            <span class="detail-value">-5</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Registered:</span>
+                            <span class="detail-value">2026-03-26</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Check:</span>
+                            <span class="detail-value">2026-03-26 14:00 UTC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Card 5: Perfect uptime -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="service-card p-3" onclick="toggleCard(this)">
+                    <div class="card-header-section">
+                        <span class="callsign">WLNK-1</span>
+                        <span class="status-badge status-active">Active</span>
+                    </div>
+                    <p class="description truncated">Winlink gateway providing email services over radio for amateur and emergency communications.</p>
+                    <div class="heatmap-container">
+                        <div class="heatmap">
+                            <!-- Perfect uptime -->
+                            <div class="heatmap-dot dot-success" title="Hour 1: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 2: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 3: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 4: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 5: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 6: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 7: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 8: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 9: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 10: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 11: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 12: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 13: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 14: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 15: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 16: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 17: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 18: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 19: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 20: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 21: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 22: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 23: passed"></div>
+                            <div class="heatmap-dot dot-success" title="Hour 24: passed"></div>
+                        </div>
+                        <span class="uptime">100%</span>
+                    </div>
+                    <a href="#" class="website-link" onclick="event.stopPropagation()">https://winlink.org</a>
+                    
+                    <div class="expanded-details" style="display: none;">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">Winlink Gateway</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Frequency:</span>
+                            <span class="detail-value">144.390 MHz</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">SSID:</span>
+                            <span class="detail-value">-1</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Registered:</span>
+                            <span class="detail-value">2024-03-10</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Check:</span>
+                            <span class="detail-value">2026-03-26 14:30 UTC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Card 6: No health data yet -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="service-card p-3" onclick="toggleCard(this)">
+                    <div class="card-header-section">
+                        <span class="callsign">NEWBOT-7</span>
+                        <span class="status-badge status-active">Active</span>
+                    </div>
+                    <p class="description truncated">Newly registered service - health checks pending.</p>
+                    <div class="heatmap-container">
+                        <div class="heatmap">
+                            <!-- No data yet -->
+                            <div class="heatmap-dot dot-nodata" title="Hour 1: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 2: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 3: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 4: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 5: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 6: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 7: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 8: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 9: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 10: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 11: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 12: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 13: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 14: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 15: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 16: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 17: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 18: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 19: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 20: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 21: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 22: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 23: no data"></div>
+                            <div class="heatmap-dot dot-nodata" title="Hour 24: no data"></div>
+                        </div>
+                        <span class="uptime">--</span>
+                    </div>
+                    <span class="text-muted" style="font-size: 0.85rem; font-style: italic;">No website provided</span>
+                    
+                    <div class="expanded-details" style="display: none;">
+                        <div class="detail-row">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value">General Service</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Frequency:</span>
+                            <span class="detail-value">144.390 MHz</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">SSID:</span>
+                            <span class="detail-value">-7</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Registered:</span>
+                            <span class="detail-value">2026-03-26</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Last Check:</span>
+                            <span class="detail-value">Pending first check</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <p class="text-muted mt-4 text-center" style="font-size: 0.85rem;">
+            Click any card to expand and see full service details
+        </p>
+    </div>
+    
+    <script>
+        let currentlyExpanded = null;
+        
+        function toggleCard(card) {
+            const details = card.querySelector('.expanded-details');
+            const description = card.querySelector('.description');
+            
+            // If clicking the same card, collapse it
+            if (currentlyExpanded === card) {
+                details.style.display = 'none';
+                description.classList.add('truncated');
+                card.classList.remove('expanded');
+                currentlyExpanded = null;
+                return;
+            }
+            
+            // Collapse previously expanded card
+            if (currentlyExpanded) {
+                const prevDetails = currentlyExpanded.querySelector('.expanded-details');
+                const prevDesc = currentlyExpanded.querySelector('.description');
+                prevDetails.style.display = 'none';
+                prevDesc.classList.add('truncated');
+                currentlyExpanded.classList.remove('expanded');
+            }
+            
+            // Expand clicked card
+            details.style.display = 'block';
+            description.classList.remove('truncated');
+            card.classList.add('expanded');
+            currentlyExpanded = card;
+        }
+    </script>
+</body>
+</html>

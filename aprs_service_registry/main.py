@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from aprs_service_registry import conf, objectstore, utils  # noqa
 from aprs_service_registry.health_checker import (
     HealthCheckStore,
+    calculate_uptime,
     check_service,
     get_checkable_services,
     setup_scheduler,
@@ -155,14 +156,15 @@ class APRSServices(objectstore.ObjectStoreMixin):
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
+    """Render the card-based view of services."""
     services = APRSServices()
     all_services = services.get_all()
     store = HealthCheckStore()
 
-    # Filter for website: show active and down, hide deleted
-    # Also build health check info
+    # Filter for website: show active, pending and down, hide deleted
+    # Build health check info (all results for heatmap)
     filtered_services = {}
-    health_checks = {}
+    health_results = {}
 
     for callsign, service in all_services.items():
         service_dict = service_to_dict(service)
@@ -170,8 +172,8 @@ async def get(request: Request):
 
         if status in ("active", "pending", "down"):
             filtered_services[callsign] = service
-            # Get health check result
-            health_checks[callsign] = store.get_last_result(callsign)
+            # Get all health check results for heatmap
+            health_results[callsign] = store.get_results(callsign)
 
     return templates.TemplateResponse(
         request=request,
@@ -179,7 +181,8 @@ async def get(request: Request):
         context={
             "request": request,
             "services": filtered_services,
-            "health_checks": health_checks,
+            "health_results": health_results,
+            "calculate_uptime": calculate_uptime,
         },
     )
 

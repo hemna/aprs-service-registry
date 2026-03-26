@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
         integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
         crossorigin="anonymous">
-  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.0/css/dataTables.dataTables.min.css">
   <link rel="stylesheet" href="/static/main.css">
 </head>
 <body>
@@ -22,7 +21,8 @@
           <p class="site-tagline">Discover APRS services on the network</p>
         </div>
         <nav class="header-nav">
-          <a href="#services" class="nav-link">Services</a>
+          <a href="/" class="nav-link nav-link--active">Cards</a>
+          <a href="/services" class="nav-link">Table</a>
           <a href="#register" class="nav-link">How to Register</a>
           <a href="/docs" class="nav-link nav-link--outline" target="_blank" rel="noopener">API Docs</a>
         </nav>
@@ -37,7 +37,7 @@
           <h2>Registered Services</h2>
           <span class="badge-count" id="service-count">{{ services|length }} service{% if services|length != 1 %}s{% endif %}</span>
         </div>
-        <p class="section-desc">A list of known APRS services so operators can find them quickly.</p>
+        <p class="section-desc">A list of known APRS services so operators can find them quickly. Click a card to see details.</p>
 
         <div class="status-legend">
           <span class="legend-item"><span class="badge bg-success">Active</span> Service is responding to health checks</span>
@@ -45,70 +45,118 @@
           <span class="legend-item"><span class="badge bg-danger">Down</span> Service has been unresponsive for 24+ hours</span>
         </div>
 
-        <div class="table-card">
-          {% if services|length > 0 %}
-          <div class="table-responsive">
-            <table id="services-table" class="services-table" style="width:100%">
-              <thead>
-                <tr>
-                  <th>Callsign</th>
-                  <th>Status</th>
-                  <th>Last Check</th>
-                  <th>Owner</th>
-                  <th>Description</th>
-                  <th>URL</th>
-                  <th>Software</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for service in services %}
-                <tr{% if services[service].status in ['down', 'pending'] %} class="service-{{ services[service].status }}"{% endif %}>
-                  <td><span class="callsign">{{ service }}</span></td>
-                  <td>
-                    {% if services[service].status == 'down' %}
-                      <span class="badge bg-danger">Down</span>
-                    {% elif services[service].status == 'pending' %}
-                      <span class="badge bg-warning text-dark">Pending</span>
+        {% if services|length > 0 %}
+        <div class="row g-4">
+          {% for callsign, service in services.items() %}
+          <div class="col-12 col-md-6 col-lg-4">
+            <div class="service-card p-3" tabindex="0" onclick="toggleCard(this)" onkeydown="handleCardKeydown(event, this)">
+              <!-- Card header with callsign and status badge -->
+              <div class="card-header-section">
+                <span class="callsign">{{ callsign }}</span>
+                {% if service.status == 'down' %}
+                  <span class="status-badge status-down">Down</span>
+                {% elif service.status == 'pending' %}
+                  <span class="status-badge status-pending">Pending</span>
+                {% else %}
+                  <span class="status-badge status-active">Active</span>
+                {% endif %}
+              </div>
+              
+              <!-- Description (truncated) -->
+              <p class="description truncated">{{ service.description or "No description provided" }}</p>
+              
+              <!-- Heatmap + Uptime -->
+              <div class="heatmap-container">
+                <div class="heatmap">
+                  {% set results = health_results.get(callsign, []) %}
+                  {% set num_results = results|length %}
+                  {% for i in range(24) %}
+                    {% if i < (24 - num_results) %}
+                      <div class="heatmap-dot dot-nodata" title="Hour {{ i + 1 }}: no data"></div>
                     {% else %}
-                      <span class="badge bg-success">Active</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if health_checks[service] %}
-                      {% if health_checks[service].success %}
-                        <span class="health-check-success" title="Response time: {{ health_checks[service].response_time_ms }}ms">
-                          ✓ {{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }} ({{ health_checks[service].response_time_ms }}ms)
-                        </span>
+                      {% set idx = i - (24 - num_results) %}
+                      {% if results[idx].success %}
+                        <div class="heatmap-dot dot-success" title="Hour {{ i + 1 }}: passed"></div>
                       {% else %}
-                        <span class="health-check-failure" title="{{ health_checks[service].error }}">
-                          ✗ {{ health_checks[service].timestamp.strftime('%Y-%m-%d %H:%M') }}
-                        </span>
+                        <div class="heatmap-dot dot-failure" title="Hour {{ i + 1 }}: failed"></div>
                       {% endif %}
-                    {% else %}
-                      <span class="health-check-none">—</span>
                     {% endif %}
-                  </td>
-                  <td>{{ services[service].callsign_owner or '-' }}</td>
-                  <td>{{ services[service].description }}</td>
-                  <td>
-                    <a href="{{ services[service].service_website }}" target="_blank" rel="noopener noreferrer" class="link-external">
-                      {{ services[service].service_website }}
-                    </a>
-                  </td>
-                  <td><code class="software">{{ services[service].software }}</code></td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+                  {% endfor %}
+                </div>
+                <span class="uptime">{{ calculate_uptime(health_results.get(callsign, [])) }}</span>
+              </div>
+              
+              <!-- Website URL -->
+              {% if service.service_website %}
+                <a href="{{ service.service_website }}" class="website-link" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+                  {{ service.service_website }}
+                </a>
+              {% else %}
+                <span class="text-muted" style="font-size: 0.85rem; font-style: italic;">No website provided</span>
+              {% endif %}
+              
+              <!-- Expanded details (hidden by default) -->
+              <div class="expanded-details" style="display: none;">
+                {% if service.description %}
+                <div class="detail-row">
+                  <span class="detail-label">Description:</span>
+                  <span class="detail-value">{{ service.description }}</span>
+                </div>
+                {% endif %}
+                {% if service.software %}
+                <div class="detail-row">
+                  <span class="detail-label">Software:</span>
+                  <span class="detail-value"><code class="software">{{ service.software }}</code></span>
+                </div>
+                {% endif %}
+                {% if service.callsign_owner %}
+                <div class="detail-row">
+                  <span class="detail-label">Owner:</span>
+                  <span class="detail-value">{{ service.callsign_owner }}</span>
+                </div>
+                {% endif %}
+                {% if service.created_at %}
+                <div class="detail-row">
+                  <span class="detail-label">Registered:</span>
+                  <span class="detail-value">{{ service.created_at.strftime('%Y-%m-%d') if service.created_at else '--' }}</span>
+                </div>
+                {% endif %}
+                {% if service.updated_at %}
+                <div class="detail-row">
+                  <span class="detail-label">Last Updated:</span>
+                  <span class="detail-value">{{ service.updated_at.strftime('%Y-%m-%d %H:%M') if service.updated_at else '--' }}</span>
+                </div>
+                {% endif %}
+                
+                {% set results = health_results.get(callsign, []) %}
+                {% if results %}
+                <div class="health-log">
+                  <div class="health-log-title">Recent Health Checks:</div>
+                  {% for result in results[:5] %}
+                  <div class="health-log-item">
+                    {% if result.success %}
+                      <span class="check-success">&#10003;</span>
+                      <span>{{ result.timestamp.strftime('%H:%M') }} - OK{% if result.response_time_ms %} ({{ result.response_time_ms }}ms){% endif %}</span>
+                    {% else %}
+                      <span class="check-failure">&#10007;</span>
+                      <span>{{ result.timestamp.strftime('%H:%M') }} - {{ result.error or 'Failed' }}</span>
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </div>
+            </div>
           </div>
-          {% else %}
-          <div class="empty-state">
-            <div class="empty-state__icon" aria-hidden="true">◇</div>
-            <h3>No services registered yet</h3>
-            <p>Be the first to register your APRS service. <a href="#register">See how to register</a>.</p>
-          </div>
-          {% endif %}
+          {% endfor %}
         </div>
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-state__icon" aria-hidden="true">&#9671;</div>
+          <h3>No services registered yet</h3>
+          <p>Be the first to register your APRS service. <a href="#register">See how to register</a>.</p>
+        </div>
+        {% endif %}
       </div>
     </section>
 
@@ -217,32 +265,54 @@ frequency_seconds = 900</code></pre>
 
   <footer class="site-footer">
     <div class="container">
-      <p>APRS Service Registry · <a href="/docs" target="_blank" rel="noopener">API</a></p>
+      <p>APRS Service Registry &middot; <a href="/docs" target="_blank" rel="noopener">API</a></p>
     </div>
   </footer>
 
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"
-          integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
-          crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
           integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
           crossorigin="anonymous"></script>
-  <script src="https://cdn.datatables.net/2.0.0/js/dataTables.min.js"></script>
   <script>
 (function() {
   'use strict';
 
-  // DataTable (only if we have rows)
-  document.addEventListener('DOMContentLoaded', function() {
-    var $table = $('#services-table');
-    if ($table.length && $table.find('tbody tr').length && typeof $table.DataTable === 'function') {
-      $table.DataTable({
-        pageLength: 25,
-        order: [[0, 'asc']],
-        language: { search: 'Filter:', searchPlaceholder: 'callsign, description...' }
-      });
+  let currentlyExpanded = null;
+
+  window.toggleCard = function(card) {
+    const details = card.querySelector('.expanded-details');
+    const description = card.querySelector('.description');
+    
+    // If clicking the same card, collapse it
+    if (currentlyExpanded === card) {
+      details.style.display = 'none';
+      description.classList.add('truncated');
+      card.classList.remove('expanded');
+      currentlyExpanded = null;
+      return;
     }
-  });
+    
+    // Collapse previously expanded card
+    if (currentlyExpanded) {
+      const prevDetails = currentlyExpanded.querySelector('.expanded-details');
+      const prevDesc = currentlyExpanded.querySelector('.description');
+      prevDetails.style.display = 'none';
+      prevDesc.classList.add('truncated');
+      currentlyExpanded.classList.remove('expanded');
+    }
+    
+    // Expand clicked card
+    details.style.display = 'block';
+    description.classList.remove('truncated');
+    card.classList.add('expanded');
+    currentlyExpanded = card;
+  };
+
+  window.handleCardKeydown = function(event, card) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleCard(card);
+    }
+  };
 
   // Smooth scroll for anchor links
   document.querySelectorAll('a[href^="#"]').forEach(function(a) {
