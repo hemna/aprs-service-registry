@@ -23,6 +23,11 @@ SECONDS_PER_HOUR = 3600
 _aprsd_initialized = False
 _aprsd_init_lock = threading.Lock()
 
+# Global persistent consumer thread
+_consumer_thread: threading.Thread | None = None
+_consumer_running = False
+_consumer_lock = threading.Lock()
+
 # Global tracker for received ACKs/responses from services
 # Key: callsign (uppercase), Value: {"timestamp": time.time(), "response": "ACK" or message}
 _received_responses: dict[str, dict] = {}
@@ -65,6 +70,107 @@ def clear_old_responses(max_age_seconds: int = 300) -> None:
         ]
         for k in to_delete:
             del _received_responses[k]
+
+
+def _global_rx_callback(packet):
+    """Global callback for ALL received packets.
+
+    This runs in the persistent consumer thread and records all incoming
+    ACKs and messages to the global tracker.
+    """
+    # Extract fields - handle both dict (from aprslib) and object formats
+    if isinstance(packet, dict):
+        pkt_from = packet.get("from", "")
+        pkt_message = packet.get("message_text", "")
+        pkt_response = packet.get("response", "")  # 'ack' or 'rej'
+    else:
+        pkt_from = getattr(packet, "from_call", "")
+        pkt_message = getattr(packet, "message_text", "")
+        pkt_response = getattr(packet, "response", "")
+
+    # Record ACKs
+    if pkt_response == "ack":
+        record_response(pkt_from, "ACK")
+
+    # Record message responses
+    elif pkt_message:
+        record_response(pkt_from, pkt_message)
+
+
+def _run_persistent_consumer():
+    """Run the persistent consumer loop.
+
+    This function runs in a dedicated thread and continuously reads
+    from APRS-IS, calling _global_rx_callback for each packet.
+    """
+    global _consumer_running
+
+    try:
+        from aprsd.client.client import APRSDClient
+
+        client = APRSDClient()
+        LOG.info("Starting persistent APRS-IS consumer thread")
+
+        while _consumer_running:
+            try:
+                # consumer() blocks and calls callback for each packet
+                # We use a short internal timeout to check _consumer_running periodically
+                client.consumer(_global_rx_callback, raw=False)
+            except StopIteration:
+                # Normal exit from consumer
+                pass
+            except Exception as e:
+                if _consumer_running:
+                    LOG.warning(f"Consumer error (will retry): {e}")
+                    time.sleep(1)  # Brief pause before retry
+
+    except Exception as e:
+        LOG.error(f"Persistent consumer thread failed: {e}")
+    finally:
+        LOG.info("Persistent APRS-IS consumer thread stopped")
+
+
+def start_persistent_consumer():
+    """Start the persistent consumer thread if not already running."""
+    global _consumer_thread, _consumer_running
+
+    with _consumer_lock:
+        if _consumer_thread is not None and _consumer_thread.is_alive():
+            LOG.debug("Persistent consumer already running")
+            return True
+
+        if not _initialize_aprsd():
+            LOG.error("Cannot start consumer: APRSD not initialized")
+            return False
+
+        _consumer_running = True
+        _consumer_thread = threading.Thread(
+            target=_run_persistent_consumer,
+            name="aprs-consumer",
+            daemon=True,
+        )
+        _consumer_thread.start()
+        LOG.info("Started persistent APRS-IS consumer")
+        return True
+
+
+def stop_persistent_consumer():
+    """Stop the persistent consumer thread."""
+    global _consumer_thread, _consumer_running
+
+    with _consumer_lock:
+        if _consumer_thread is None:
+            return
+
+        LOG.info("Stopping persistent APRS-IS consumer...")
+        _consumer_running = False
+
+        # Give it a moment to stop
+        if _consumer_thread.is_alive():
+            _consumer_thread.join(timeout=5)
+
+        _consumer_thread = None
+        LOG.info("Persistent APRS-IS consumer stopped")
 
 
 @dataclass
@@ -266,10 +372,13 @@ def send_and_wait_for_response(
 ) -> tuple[str | None, int | None]:
     """Send APRS message and wait for response.
 
+    Uses a persistent consumer thread to receive packets in real-time.
+    Polls the global response tracker for incoming ACKs/messages.
+
     Args:
         callsign: Target callsign to send message to
         message: Message text to send (e.g., "ping", "help")
-        timeout: Seconds to wait for response
+        timeout: Seconds to wait for response (not currently used, we use retry_interval)
 
     Returns:
         Tuple of (response_text, response_time_ms) or (None, None) on timeout.
@@ -279,13 +388,17 @@ def send_and_wait_for_response(
         LOG.debug("Health checks disabled, skipping APRS message")
         return (None, None)
 
-    # Initialize APRSD if needed
+    # Initialize APRSD and start persistent consumer if needed
     if not _initialize_aprsd():
         LOG.error("Cannot send health check: APRSD not initialized")
         return (None, None)
 
+    # Ensure persistent consumer is running
+    if not start_persistent_consumer():
+        LOG.error("Cannot send health check: persistent consumer not running")
+        return (None, None)
+
     try:
-        from aprsd.client.client import APRSDClient
         from aprsd.packets import MessagePacket
         from aprsd.threads import tx
 
@@ -295,110 +408,24 @@ def send_and_wait_for_response(
             LOG.error("No callsign configured in APRSD config")
             return (None, None)
 
-        # Result container for thread communication
-        result = {"response_text": None, "response_time_ms": None}
-        stop_event = threading.Event()
         start_time = time.time()
+        callsign_upper = callsign.upper()
 
-        def rx_callback(packet):
-            """Callback for received packets.
-
-            Note: With raw=False, APRSD's consumer returns parsed dicts from aprslib,
-            not APRSD packet objects. We handle both formats for robustness.
-
-            An ACK from the target service counts as success - it proves the service
-            is alive and received our message.
-
-            We also record ALL ACKs/responses to a global tracker so that late
-            responses can still be counted.
-            """
-            nonlocal result
-
-            # Extract fields - handle both dict (from aprslib) and object formats
-            if isinstance(packet, dict):
-                pkt_from = packet.get("from", "")
-                pkt_message = packet.get("message_text", "")
-                pkt_response = packet.get("response", "")  # 'ack' or 'rej'
-                pkt_msgno = packet.get("msgNo")
-            else:
-                pkt_from = getattr(packet, "from_call", "")
-                pkt_message = getattr(packet, "message_text", "")
-                pkt_response = getattr(packet, "response", "")
-                pkt_msgno = getattr(packet, "msgNo", None)
-
-            # Record ALL ACKs/responses to global tracker (for late arrivals)
-            if pkt_response == "ack":
-                record_response(pkt_from, "ACK")
-            elif pkt_message:
-                record_response(pkt_from, pkt_message)
-
-            # Check if this is from our target service
-            if pkt_from.upper() != callsign.upper():
-                return
-
-            elapsed_ms = int((time.time() - start_time) * 1000)
-
-            # ACK from target = service is alive
-            if pkt_response == "ack":
-                result["response_text"] = "ACK"
-                result["response_time_ms"] = elapsed_ms
-                LOG.debug(
-                    f"Received ACK from {callsign} in {elapsed_ms}ms",
-                )
-                stop_event.set()
-                raise StopIteration
-
-            # Message response from target = service is alive
-            if pkt_message:
-                result["response_text"] = pkt_message
-                result["response_time_ms"] = elapsed_ms
-                LOG.debug(
-                    f"Received response from {callsign}: "
-                    f"'{pkt_message}' in {elapsed_ms}ms",
-                )
-
-                # Send ACK for the received message
-                try:
-                    from aprsd.packets import AckPacket
-
-                    if pkt_msgno:
-                        tx.send(
-                            AckPacket(
-                                from_call=from_call,
-                                to_call=pkt_from,
-                                msgNo=pkt_msgno,
-                            ),
-                            direct=True,
-                        )
-                except Exception as e:
-                    LOG.warning(f"Failed to send ACK: {e}")
-
-                stop_event.set()
-                raise StopIteration
-
-        # Start consumer in a thread to receive response
-        client = APRSDClient()
-
-        def consume():
-            try:
-                client.consumer(rx_callback, raw=False)
-            except StopIteration:
-                pass
-            except Exception as e:
-                LOG.debug(f"Consumer stopped: {e}")
-
-        consumer_thread = threading.Thread(target=consume, daemon=True)
-        consumer_thread.start()
+        # Clear any old response from this callsign before we start
+        with _received_responses_lock:
+            if callsign_upper in _received_responses:
+                del _received_responses[callsign_upper]
 
         # Send message with retry logic - retry every 30s if no response
         max_retries = 3
         retry_interval = 30  # seconds
+        poll_interval = 0.5  # Check for response every 500ms
 
         for attempt in range(1, max_retries + 1):
             # Create and send the message
             packet = MessagePacket(
                 from_call=from_call,
-                to_call=callsign.upper(),
+                to_call=callsign_upper,
                 message_text=message,
             )
             LOG.info(
@@ -406,23 +433,28 @@ def send_and_wait_for_response(
             )
             tx.send(packet, direct=True)
 
-            # Wait for response or retry interval
-            if stop_event.wait(timeout=retry_interval):
-                # Got a response
-                break
+            # Poll for response
+            attempt_start = time.time()
+            while time.time() - attempt_start < retry_interval:
+                # Check if we got a response
+                response = get_recent_response(callsign_upper, start_time)
+                if response:
+                    elapsed_ms = int((response["timestamp"] - start_time) * 1000)
+                    LOG.debug(
+                        f"Received response from {callsign}: '{response['response']}' in {elapsed_ms}ms"
+                    )
+                    return (response["response"], elapsed_ms)
+
+                # Wait before polling again
+                time.sleep(poll_interval)
 
             if attempt < max_retries:
                 LOG.debug(
                     f"No response from {callsign} after {retry_interval}s, retrying..."
                 )
 
-        if result["response_text"] is not None:
-            return (result["response_text"], result["response_time_ms"])
-        else:
-            LOG.warning(
-                f"Health check timeout for {callsign} after {max_retries} attempts"
-            )
-            return (None, None)
+        LOG.warning(f"Health check timeout for {callsign} after {max_retries} attempts")
+        return (None, None)
 
     except ImportError as e:
         LOG.error(f"APRSD import error: {e}")

@@ -20,7 +20,9 @@ from aprs_service_registry.health_checker import (
     check_service,
     get_checkable_services,
     setup_scheduler,
+    start_persistent_consumer,
     start_scheduler,
+    stop_persistent_consumer,
     stop_scheduler,
 )
 
@@ -76,14 +78,18 @@ async def lifespan(app: FastAPI):
     APRSServices().load()
     HealthCheckStore().load()
 
+    # Start the persistent APRS-IS consumer for receiving packets
+    start_persistent_consumer()
+
     # Set up health check scheduler
     setup_scheduler()
     start_scheduler()
 
     yield
 
-    # Shutdown: Stop scheduler and save data
+    # Shutdown: Stop scheduler, consumer, and save data
     stop_scheduler()
+    stop_persistent_consumer()
     APRSServices().save()
     HealthCheckStore().save()
 
