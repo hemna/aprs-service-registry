@@ -20,6 +20,31 @@ MAX_RESULTS_PER_SERVICE = 24
 SECONDS_PER_HOUR = 3600
 PENDING_TO_DOWN_HOURS = 24  # Hours of failures before pending -> down
 
+
+def calculate_uptime(results: list) -> str:
+    """Calculate uptime percentage from health check results.
+
+    Args:
+        results: List of health check result dicts/objects with 'success' key/attr
+
+    Returns:
+        Uptime string like "96%" or "--" if no data
+    """
+    if not results:
+        return "--"
+    # Handle both dict and object results
+    passed = 0
+    for r in results:
+        if isinstance(r, dict):
+            success = r.get("success", False)
+        else:
+            success = getattr(r, "success", False)
+        if success:
+            passed += 1
+    percentage = (passed / len(results)) * 100
+    return f"{percentage:.0f}%"
+
+
 # Global flag to track if APRSD client is initialized
 _aprsd_initialized = False
 _aprsd_init_lock = threading.Lock()

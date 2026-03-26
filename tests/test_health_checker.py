@@ -4,6 +4,83 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 
+class TestCalculateUptime:
+    """Tests for calculate_uptime helper function."""
+
+    def test_calculate_uptime_all_success(self):
+        """Test uptime calculation with all successful checks."""
+        from aprs_service_registry.health_checker import calculate_uptime
+
+        results = [{"success": True} for _ in range(24)]
+        assert calculate_uptime(results) == "100%"
+
+    def test_calculate_uptime_mixed(self):
+        """Test uptime calculation with mixed results."""
+        from aprs_service_registry.health_checker import calculate_uptime
+
+        results = [{"success": True}] * 23 + [{"success": False}]
+        assert calculate_uptime(results) == "96%"
+
+    def test_calculate_uptime_all_failures(self):
+        """Test uptime calculation with all failures."""
+        from aprs_service_registry.health_checker import calculate_uptime
+
+        results = [{"success": False} for _ in range(24)]
+        assert calculate_uptime(results) == "0%"
+
+    def test_calculate_uptime_empty(self):
+        """Test uptime calculation with no data."""
+        from aprs_service_registry.health_checker import calculate_uptime
+
+        assert calculate_uptime([]) == "--"
+
+    def test_calculate_uptime_partial(self):
+        """Test uptime calculation with partial data (new service)."""
+        from aprs_service_registry.health_checker import calculate_uptime
+
+        results = [{"success": True}] * 6
+        assert calculate_uptime(results) == "100%"
+
+    def test_calculate_uptime_with_objects(self):
+        """Test uptime calculation with object results (HealthCheckResult)."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckResult,
+            calculate_uptime,
+        )
+
+        results = [
+            HealthCheckResult(
+                timestamp=datetime.now(timezone.utc),
+                success=True,
+                response_time_ms=100,
+                response_text="OK",
+                error=None,
+            )
+            for _ in range(10)
+        ]
+        # Add 2 failures
+        results.append(
+            HealthCheckResult(
+                timestamp=datetime.now(timezone.utc),
+                success=False,
+                response_time_ms=None,
+                response_text=None,
+                error="Timeout",
+            )
+        )
+        results.append(
+            HealthCheckResult(
+                timestamp=datetime.now(timezone.utc),
+                success=False,
+                response_time_ms=None,
+                response_text=None,
+                error="Timeout",
+            )
+        )
+        # 10/12 = 83.33% -> 83%
+        assert calculate_uptime(results) == "83%"
+
+
 class TestHealthCheckResult:
     """Tests for HealthCheckResult dataclass."""
 
