@@ -107,6 +107,11 @@ body {
   margin: 0.15rem 0 0 0;
 }
 
+.site-author {
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .header-nav {
   display: flex;
   align-items: center;
