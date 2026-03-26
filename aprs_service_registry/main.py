@@ -217,6 +217,57 @@ async def services_page(request: Request):
     )
 
 
+# Documentation routes
+@app.get("/about", response_class=HTMLResponse, include_in_schema=False)
+async def about_page(request: Request):
+    """Render the About documentation page."""
+    return templates.TemplateResponse(
+        request=request,
+        name="about.html",
+        context={"request": request, "active_page": "about"},
+    )
+
+
+@app.get("/guide", response_class=HTMLResponse, include_in_schema=False)
+async def guide_page(request: Request):
+    """Render the Guide documentation page."""
+    return templates.TemplateResponse(
+        request=request,
+        name="guide.html",
+        context={"request": request, "active_page": "guide"},
+    )
+
+
+@app.get("/developers", response_class=HTMLResponse, include_in_schema=False)
+async def developers_page(request: Request):
+    """Render the Developers documentation page."""
+    return templates.TemplateResponse(
+        request=request,
+        name="developers.html",
+        context={"request": request, "active_page": "developers"},
+    )
+
+
+@app.get("/service-types", response_class=HTMLResponse, include_in_schema=False)
+async def service_types_page(request: Request):
+    """Render the Service Types documentation page."""
+    return templates.TemplateResponse(
+        request=request,
+        name="service_types.html",
+        context={"request": request, "active_page": "service-types"},
+    )
+
+
+@app.get("/faq", response_class=HTMLResponse, include_in_schema=False)
+async def faq_page(request: Request):
+    """Render the FAQ documentation page."""
+    return templates.TemplateResponse(
+        request=request,
+        name="faq.html",
+        context={"request": request, "active_page": "faq"},
+    )
+
+
 @app.post("/api/v1/registry", response_class=JSONResponse)
 async def registry(request: registryRequest):
     """Register a service with the registry and/or update."""

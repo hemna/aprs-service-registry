@@ -1,0 +1,188 @@
+{% extends "docs_base.html" %}
+
+{% block title %}FAQ{% endblock %}
+
+{% block page_title %}Frequently Asked Questions{% endblock %}
+
+{% block page_subtitle %}
+<p class="docs-subtitle">Common questions and troubleshooting help.</p>
+{% endblock %}
+
+{% block quick_start %}
+<div class="quick-start">
+  <h2>Common Issues at a Glance</h2>
+  <ul>
+    <li><strong>Service not showing?</strong> &mdash; Check your registration request and verify the callsign is correct</li>
+    <li><strong>Service shows as down?</strong> &mdash; Ensure your service is connected to APRS-IS and responding to messages</li>
+    <li><strong>Health check failing?</strong> &mdash; Verify your service responds to APRS messages within the timeout period</li>
+  </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="docs-section">
+  <h2>General Questions</h2>
+  
+  <div class="faq-item">
+    <h3>What is this site?</h3>
+    <p>The APRS Service Registry is a public directory of APRS message-based services. It helps ham radio operators discover available services and helps service operators make their services visible to the community.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Is this an official APRS resource?</h3>
+    <p>No, this is a community-maintained project. It is not affiliated with any official APRS organization, though it aims to be a useful resource for the APRS community.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>How often is the data updated?</h3>
+    <p>Service registrations are updated immediately when operators POST new data. Health checks run <strong>hourly</strong> for all registered services, so status information is typically less than an hour old.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Is this service free?</h3>
+    <p>Yes, the APRS Service Registry is completely free to use for both browsing and registration. There are no fees or premium tiers.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Can I contribute to this project?</h3>
+    <p>Yes! The project is open source. You can contribute code, report bugs, or suggest features via the GitHub repository.</p>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>For Operators</h2>
+  
+  <div class="faq-item">
+    <h3>Why isn't my service showing up?</h3>
+    <p>Check the following:</p>
+    <ul>
+      <li>Verify your registration request was successful (you should get a <code>{"status": "ok"}</code> response)</li>
+      <li>Confirm the callsign is correct (callsigns are case-insensitive but stored as uppercase)</li>
+      <li>Services with "deleted" status are hidden from the public listing</li>
+    </ul>
+  </div>
+  
+  <div class="faq-item">
+    <h3>How do I update my service information?</h3>
+    <p>Simply POST to the registration endpoint again with the same callsign. The new data will replace the existing record. Your health check history will be preserved.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>What happens if health checks fail?</h3>
+    <p>When health checks fail, your service status changes:</p>
+    <ol>
+      <li><strong>First failure:</strong> Status changes from "active" to "pending"</li>
+      <li><strong>Continued failures:</strong> After 24 hours of failures, status changes to "down"</li>
+      <li><strong>Recovery:</strong> When a health check passes, status returns to "active"</li>
+    </ol>
+    <p>Services are never automatically deleted due to health check failures.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>How do I remove my service from the registry?</h3>
+    <p>Send a DELETE request to <code>/api/v1/registry/{your-callsign}</code>. This performs a soft delete&mdash;your service will be hidden from the public listing but the record is retained.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Can I re-register after deleting?</h3>
+    <p>Currently, deleted services cannot be re-registered automatically. Contact the maintainers if you need to restore a deleted service.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>How do health checks actually work?</h3>
+    <p>The registry sends an APRS message to your service's callsign via APRS-IS. If your service sends any response message within the timeout period (typically 60 seconds), the check passes. The registry does not validate the content of the response&mdash;any response indicates the service is alive.</p>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>For Developers</h2>
+  
+  <div class="faq-item">
+    <h3>Is there rate limiting?</h3>
+    <p>Currently, <strong>no rate limits</strong> are enforced. However, we ask that you be reasonable:</p>
+    <ul>
+      <li>Cache responses where appropriate</li>
+      <li>Avoid polling more frequently than once per minute</li>
+      <li>Consider using the service count to detect changes instead of fetching all data</li>
+    </ul>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Can I use this data in my application?</h3>
+    <p>Yes! The API is public and the data is freely available. We encourage building applications that help the APRS community. Attribution is appreciated but not required.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Is there a webhook or push notification system?</h3>
+    <p>Not currently. The API is pull-based only. Webhooks for change notifications may be added in the future.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>What's the best way to get notified of new services?</h3>
+    <p>Poll the <code>/api/v1/registry</code> endpoint periodically and compare the <code>count</code> field to detect additions. For real-time needs, consider polling every few minutes.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>How do I report a bug or request a feature?</h3>
+    <p>Open an issue on the project's GitHub repository. Please include as much detail as possible, including steps to reproduce for bugs.</p>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>Health Check Questions</h2>
+  
+  <div class="faq-item">
+    <h3>What do the colored dots mean?</h3>
+    <p>The heatmap shows the last 24 health check results:</p>
+    <ul>
+      <li><span class="dot-legend dot-success"></span> <strong>Green</strong> &mdash; Health check passed (service responded)</li>
+      <li><span class="dot-legend dot-failure"></span> <strong>Red</strong> &mdash; Health check failed (no response or error)</li>
+      <li><span class="dot-legend dot-nodata"></span> <strong>Gray</strong> &mdash; No data (check hasn't run yet for this hour)</li>
+    </ul>
+  </div>
+  
+  <div class="faq-item">
+    <h3>How is uptime calculated?</h3>
+    <p>Uptime is calculated as the percentage of successful health checks over the last 24 hours. For example, if 20 out of 24 checks passed, uptime would be ~83%.</p>
+    <p>If fewer than 24 checks have been recorded (new services), uptime is calculated based on available data.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Why does my service show as unhealthy?</h3>
+    <p>Common reasons for failed health checks:</p>
+    <ul>
+      <li><strong>Not connected to APRS-IS</strong> &mdash; Your service needs an active APRS-IS connection to receive messages</li>
+      <li><strong>Not responding to messages</strong> &mdash; Your service must send a reply to incoming messages</li>
+      <li><strong>Response too slow</strong> &mdash; Responses must arrive within the timeout period (typically 60 seconds)</li>
+      <li><strong>Wrong callsign</strong> &mdash; The response must come from the registered callsign</li>
+      <li><strong>Network issues</strong> &mdash; Temporary APRS-IS connectivity problems can cause false failures</li>
+    </ul>
+  </div>
+  
+  <div class="faq-item">
+    <h3>Can I trigger a health check manually?</h3>
+    <p>Yes! POST to <code>/api/v1/health-check/{callsign}</code> to immediately check a specific service. This is useful for testing after making changes to your service.</p>
+  </div>
+  
+  <div class="faq-item">
+    <h3>My service responded but the check still failed. Why?</h3>
+    <p>Possible reasons:</p>
+    <ul>
+      <li>Response was sent to a different callsign than the check originated from</li>
+      <li>Response took longer than the timeout period</li>
+      <li>Network routing issues caused the response to not reach the registry</li>
+      <li>Response was malformed or truncated</li>
+    </ul>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>Still Have Questions?</h2>
+  <p>If your question isn't answered here:</p>
+  <ul>
+    <li>Check the <a href="/developers">Developer documentation</a> for API details</li>
+    <li>Review the <a href="/guide">Operator's Guide</a> for registration help</li>
+    <li>Open an issue on GitHub for bugs or feature requests</li>
+  </ul>
+</section>
+{% endblock %}

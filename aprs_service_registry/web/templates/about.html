@@ -1,0 +1,75 @@
+{% extends "docs_base.html" %}
+
+{% block title %}About{% endblock %}
+
+{% block page_title %}About APRS Service Registry{% endblock %}
+
+{% block page_subtitle %}
+<p class="docs-subtitle">What is this registry and why does it exist?</p>
+{% endblock %}
+
+{% block quick_start %}
+<div class="quick-start">
+  <h2>TL;DR</h2>
+  <p>The APRS Service Registry is a public directory of APRS message-based services. It helps ham radio operators discover services they can interact with over APRS, and helps service operators make their services visible to the community.</p>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="docs-section">
+  <h2>What is APRS Service Registry?</h2>
+  <p>The APRS Service Registry is a centralized directory of APRS (Automatic Packet Reporting System) services available on the amateur radio network. Think of it as a "yellow pages" for APRS services.</p>
+  <p>APRS services are automated stations that respond to messages sent by ham radio operators. For example, you might send a message to a weather service to get current conditions, or query a repeater finder to locate nearby repeaters.</p>
+  <p>This registry collects information about these services in one place, making it easy for operators to discover what's available and how to use them.</p>
+</section>
+
+<section class="docs-section">
+  <h2>Why Use This Registry?</h2>
+  
+  <h3>For Ham Radio Operators</h3>
+  <ul>
+    <li><strong>Discover services</strong> &mdash; Find APRS services you didn't know existed</li>
+    <li><strong>Check availability</strong> &mdash; See which services are currently online and responding</li>
+    <li><strong>Get details</strong> &mdash; Learn what each service does and how to use it</li>
+  </ul>
+  
+  <h3>For Service Operators</h3>
+  <ul>
+    <li><strong>Visibility</strong> &mdash; Make your service discoverable to the APRS community</li>
+    <li><strong>Monitoring</strong> &mdash; Get automated health checks to know if your service is responding</li>
+    <li><strong>Simple registration</strong> &mdash; Register via a simple REST API call</li>
+  </ul>
+</section>
+
+<section class="docs-section">
+  <h2>How It Works</h2>
+  <p>The registry operates on a simple model:</p>
+  <ol>
+    <li><strong>Registration</strong> &mdash; Service operators register their service via the API, providing their callsign, description, and website URL.</li>
+    <li><strong>Health Checks</strong> &mdash; The registry periodically checks if registered services are responding by sending APRS messages and waiting for replies.</li>
+    <li><strong>Status Display</strong> &mdash; The website displays all registered services with their current health status (active, pending, or down).</li>
+  </ol>
+  
+  <h3>Service Status Meanings</h3>
+  <ul>
+    <li><span class="badge bg-success">Active</span> &mdash; Service is responding to health checks</li>
+    <li><span class="badge bg-warning text-dark">Pending</span> &mdash; Service recently failed health checks (may be temporarily unavailable)</li>
+    <li><span class="badge bg-danger">Down</span> &mdash; Service has been unresponsive for 24+ hours</li>
+  </ul>
+</section>
+
+<section class="docs-section">
+  <h2>Who Maintains This?</h2>
+  <p>The APRS Service Registry is an open-source project maintained by the amateur radio community. The source code is available on GitHub, and contributions are welcome.</p>
+  <p>The registry is hosted and operated as a free service for the ham radio community. There are no fees or commercial interests involved.</p>
+</section>
+
+<section class="docs-section">
+  <h2>Next Steps</h2>
+  <ul>
+    <li><a href="/guide">Register your service</a> &mdash; Learn how to add your APRS service to the registry</li>
+    <li><a href="/developers">Build an integration</a> &mdash; Use the API to query the registry from your application</li>
+    <li><a href="/service-types">Learn about service types</a> &mdash; Understand the different types of APRS services</li>
+  </ul>
+</section>
+{% endblock %}

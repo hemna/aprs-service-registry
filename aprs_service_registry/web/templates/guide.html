@@ -1,0 +1,198 @@
+{% extends "docs_base.html" %}
+
+{% block title %}Guide{% endblock %}
+
+{% block page_title %}Operator's Guide{% endblock %}
+
+{% block page_subtitle %}
+<p class="docs-subtitle">How to register and maintain your APRS service in the registry.</p>
+{% endblock %}
+
+{% block quick_start %}
+<div class="quick-start">
+  <h2>TL;DR</h2>
+  <p>Register your service with a single HTTP POST to <code>/api/v1/registry</code> with your callsign, description, and website URL. The registry will automatically check your service's health hourly.</p>
+  <div class="code-block">
+    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/registry \
+  -H "Content-Type: application/json" \
+  -d '{"callsign": "MYCALL", "description": "My APRS service", "service_website": "http://example.com", "software": "APRSD 3.3.0"}'</code></pre>
+    <button type="button" class="btn-copy" title="Copy">Copy</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="docs-section">
+  <h2>Prerequisites</h2>
+  <p>Before registering your service, make sure you have:</p>
+  <ul>
+    <li><strong>A valid amateur radio callsign</strong> &mdash; Your service must operate under a licensed callsign</li>
+    <li><strong>A running APRS service</strong> &mdash; Your service should be operational and connected to APRS-IS</li>
+    <li><strong>A service website (optional)</strong> &mdash; A URL where users can learn more about your service</li>
+  </ul>
+</section>
+
+<section class="docs-section">
+  <h2>Registration Process</h2>
+  <p>Register your service by sending an HTTP POST request to the registry API. You can do this manually, or configure your APRS software to do it automatically.</p>
+  
+  <h3>Required Fields</h3>
+  <table class="docs-table">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>callsign</code></td>
+        <td>string</td>
+        <td>Your service's callsign (will be uppercased)</td>
+      </tr>
+      <tr>
+        <td><code>description</code></td>
+        <td>string</td>
+        <td>A brief description of what your service does</td>
+      </tr>
+      <tr>
+        <td><code>service_website</code></td>
+        <td>string</td>
+        <td>URL for more information about your service</td>
+      </tr>
+      <tr>
+        <td><code>software</code></td>
+        <td>string</td>
+        <td>The software and version running your service</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Optional Fields</h3>
+  <table class="docs-table">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>callsign_owner</code></td>
+        <td>string</td>
+        <td>The owner's name or personal callsign</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Example Request</h3>
+  <div class="code-block">
+    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/registry \
+  -H "Content-Type: application/json" \
+  -d '{
+    "callsign": "REPEAT",
+    "description": "Find the nearest N repeaters to your current location",
+    "service_website": "http://aprs-repeat.hemna.com",
+    "software": "APRSD version 3.3.0",
+    "callsign_owner": "WB4BOR"
+  }'</code></pre>
+    <button type="button" class="btn-copy" title="Copy">Copy</button>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>Using APRSD</h2>
+  <p>If you're running <a href="https://pypi.org/project/aprsd/" target="_blank" rel="noopener">APRSD</a> version 3.3.0 or later, you can enable automatic registry updates in your configuration file:</p>
+  
+  <div class="code-block">
+    <pre><code>[aprs_registry]
+# Enable the automatic registry feature
+enable = true
+
+# The description of your service
+description = My service does X, Y, and Z.
+
+# The URL of your service
+service_website = http://myaprsservice.com
+
+# How often to update the registry (in seconds)
+# Default: 900 (15 minutes)
+frequency_seconds = 900</code></pre>
+    <button type="button" class="btn-copy" title="Copy">Copy</button>
+  </div>
+  
+  <p>With this configuration, APRSD will automatically register and periodically update your service in the registry.</p>
+</section>
+
+<section class="docs-section">
+  <h2>Health Checks</h2>
+  <p>The registry automatically monitors registered services to track their availability.</p>
+  
+  <h3>How Health Checks Work</h3>
+  <ol>
+    <li>The registry sends an APRS message to your service's callsign</li>
+    <li>It waits for a response (any valid APRS response)</li>
+    <li>If a response is received within the timeout, the check passes</li>
+    <li>Results are recorded and displayed on the service card</li>
+  </ol>
+  
+  <h3>Check Frequency</h3>
+  <p>Health checks run <strong>hourly</strong> for all registered services. The registry stores the last 24 check results, which are displayed as a heatmap on each service card.</p>
+  
+  <h3>Status Transitions</h3>
+  <ul>
+    <li><strong>Active → Pending</strong> &mdash; Occurs after the first failed health check</li>
+    <li><strong>Pending → Active</strong> &mdash; Occurs when a health check passes</li>
+    <li><strong>Pending → Down</strong> &mdash; Occurs after 24 hours of continuous failures</li>
+    <li><strong>Down → Active</strong> &mdash; Occurs when a health check passes</li>
+  </ul>
+  
+  <h3>Manual Health Check</h3>
+  <p>You can manually trigger a health check for your service:</p>
+  <div class="code-block">
+    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/health-check/YOURCALL</code></pre>
+    <button type="button" class="btn-copy" title="Copy">Copy</button>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>Updating Your Service</h2>
+  <p>To update your service information, simply POST to the same endpoint with the updated data. The callsign is used as the unique identifier, so any POST with the same callsign will update the existing record.</p>
+  
+  <div class="code-block">
+    <pre><code>curl -X POST https://aprs-service-registry.hemna.com/api/v1/registry \
+  -H "Content-Type: application/json" \
+  -d '{
+    "callsign": "MYCALL",
+    "description": "Updated description",
+    "service_website": "http://new-url.com",
+    "software": "APRSD 3.4.0"
+  }'</code></pre>
+    <button type="button" class="btn-copy" title="Copy">Copy</button>
+  </div>
+</section>
+
+<section class="docs-section">
+  <h2>Removing Your Service</h2>
+  <p>To remove your service from the registry, send a DELETE request:</p>
+  
+  <div class="code-block">
+    <pre><code>curl -X DELETE https://aprs-service-registry.hemna.com/api/v1/registry/YOURCALL</code></pre>
+    <button type="button" class="btn-copy" title="Copy">Copy</button>
+  </div>
+  
+  <p>This performs a "soft delete" &mdash; your service will be marked as deleted and hidden from the public listing, but the record is retained in case you want to re-register later.</p>
+</section>
+
+<section class="docs-section">
+  <h2>Best Practices</h2>
+  <ul>
+    <li><strong>Keep your description concise</strong> &mdash; Aim for one or two sentences that clearly explain what your service does</li>
+    <li><strong>Provide a working website</strong> &mdash; Include documentation on how to use your service</li>
+    <li><strong>Update regularly</strong> &mdash; If using APRSD, enable automatic updates to keep your listing current</li>
+    <li><strong>Monitor health checks</strong> &mdash; Check your service's status periodically to ensure it's responding</li>
+  </ul>
+</section>
+{% endblock %}

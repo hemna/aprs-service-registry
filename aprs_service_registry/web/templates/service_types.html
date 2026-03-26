@@ -1,0 +1,184 @@
+{% extends "docs_base.html" %}
+
+{% block title %}Service Types{% endblock %}
+
+{% block page_title %}APRS Service Types{% endblock %}
+
+{% block page_subtitle %}
+<p class="docs-subtitle">Understanding the different types of APRS services.</p>
+{% endblock %}
+
+{% block quick_start %}
+<div class="quick-start">
+  <h2>TL;DR</h2>
+  <ul>
+    <li><strong>Digipeaters</strong> &mdash; Relay APRS packets over RF to extend range</li>
+    <li><strong>iGates</strong> &mdash; Bridge between RF and the internet (APRS-IS)</li>
+    <li><strong>APRS-IS Servers</strong> &mdash; Internet backbone servers that route APRS data</li>
+    <li><strong>Message Services</strong> &mdash; Automated services that respond to APRS messages</li>
+  </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="docs-section">
+  <h2>What is APRS?</h2>
+  <p>APRS (Automatic Packet Reporting System) is a digital communications protocol used by amateur radio operators. It allows for the transmission of real-time tactical information including position, weather data, telemetry, and short messages.</p>
+  <p>APRS operates over VHF radio (typically 144.390 MHz in North America) and the internet via APRS-IS (APRS Internet Service).</p>
+</section>
+
+<section class="docs-section">
+  <h2>Digipeaters</h2>
+  <p>A <strong>digipeater</strong> (digital repeater) is a station that receives APRS packets over RF and retransmits them, extending the range of the APRS network.</p>
+  
+  <h3>How Digipeaters Work</h3>
+  <ol>
+    <li>A mobile or portable station transmits an APRS packet</li>
+    <li>The digipeater receives the packet on the APRS frequency</li>
+    <li>If the packet is addressed for digipeating, the digipeater retransmits it</li>
+    <li>Other stations (including other digipeaters) can receive the retransmitted packet</li>
+  </ol>
+  
+  <h3>Common Digipeater Paths</h3>
+  <ul>
+    <li><code>WIDE1-1</code> &mdash; Request one hop through fill-in digipeaters</li>
+    <li><code>WIDE2-1</code> &mdash; Request one hop through standard digipeaters</li>
+    <li><code>WIDE2-2</code> &mdash; Request two hops through standard digipeaters</li>
+  </ul>
+  
+  <h3>Types of Digipeaters</h3>
+  <ul>
+    <li><strong>Fill-in digipeaters</strong> &mdash; Low-power, short-range digipeaters that help in coverage gaps</li>
+    <li><strong>Wide-area digipeaters</strong> &mdash; High-site, high-power digipeaters providing broad coverage</li>
+    <li><strong>Mobile digipeaters</strong> &mdash; Vehicle-mounted digipeaters for events or emergencies</li>
+  </ul>
+</section>
+
+<section class="docs-section">
+  <h2>iGates</h2>
+  <p>An <strong>iGate</strong> (Internet Gateway) is a station that bridges APRS traffic between RF and the internet (APRS-IS).</p>
+  
+  <h3>Types of iGates</h3>
+  <ul>
+    <li><strong>Receive-only (RX) iGate</strong> &mdash; Receives APRS packets over RF and forwards them to APRS-IS</li>
+    <li><strong>Two-way (TX/RX) iGate</strong> &mdash; Also transmits packets from APRS-IS to RF, enabling messages to reach stations not connected to the internet</li>
+  </ul>
+  
+  <h3>How iGates Work</h3>
+  <ol>
+    <li>The iGate receives an APRS packet over RF</li>
+    <li>It connects to an APRS-IS server and uploads the packet</li>
+    <li>The packet becomes available to users worldwide via the internet</li>
+    <li>(TX iGates) Messages destined for local RF stations are transmitted</li>
+  </ol>
+  
+  <h3>iGate Considerations</h3>
+  <ul>
+    <li><strong>Filtering</strong> &mdash; iGates can filter which packets they forward to reduce network load</li>
+    <li><strong>Gating rules</strong> &mdash; TX iGates follow rules about what to transmit to avoid channel congestion</li>
+    <li><strong>Verification</strong> &mdash; Two-way iGates require a verification code to transmit</li>
+  </ul>
+</section>
+
+<section class="docs-section">
+  <h2>APRS-IS Servers</h2>
+  <p><strong>APRS-IS</strong> (APRS Internet Service) is a network of servers that distribute APRS data worldwide over the internet.</p>
+  
+  <h3>Server Tiers</h3>
+  <ul>
+    <li><strong>Tier 1 (Core)</strong> &mdash; Hub servers that interconnect the network</li>
+    <li><strong>Tier 2 (Regional)</strong> &mdash; Servers that connect to Tier 1 and serve end users</li>
+    <li><strong>Tier 3 (Leaf)</strong> &mdash; User-facing servers for clients and iGates</li>
+  </ul>
+  
+  <h3>Connecting to APRS-IS</h3>
+  <p>Users and iGates connect to APRS-IS servers on port 14580 (filtered) or 10152 (full feed). Connections are made via TCP and use a simple text-based protocol.</p>
+  
+  <h3>Regional Server Pools</h3>
+  <ul>
+    <li><code>noam.aprs2.net</code> &mdash; North America</li>
+    <li><code>soam.aprs2.net</code> &mdash; South America</li>
+    <li><code>euro.aprs2.net</code> &mdash; Europe</li>
+    <li><code>asia.aprs2.net</code> &mdash; Asia</li>
+    <li><code>aunz.aprs2.net</code> &mdash; Australia/New Zealand</li>
+  </ul>
+</section>
+
+<section class="docs-section">
+  <h2>Message Services</h2>
+  <p><strong>Message services</strong> are automated stations that respond to APRS messages, providing information or performing actions on request.</p>
+  
+  <h3>Examples of Message Services</h3>
+  <table class="docs-table">
+    <thead>
+      <tr>
+        <th>Service Type</th>
+        <th>Description</th>
+        <th>Example Command</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Weather</td>
+        <td>Returns current weather for a location</td>
+        <td><code>wx 90210</code></td>
+      </tr>
+      <tr>
+        <td>Repeater Finder</td>
+        <td>Finds nearby repeaters</td>
+        <td><code>repeater 5</code></td>
+      </tr>
+      <tr>
+        <td>Email Gateway</td>
+        <td>Sends/receives email via APRS</td>
+        <td><code>user@example.com message</code></td>
+      </tr>
+      <tr>
+        <td>Spot Price</td>
+        <td>Returns commodity prices</td>
+        <td><code>gold</code></td>
+      </tr>
+      <tr>
+        <td>QRZ Lookup</td>
+        <td>Returns callsign information</td>
+        <td><code>W1AW</code></td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <h3>How to Use Message Services</h3>
+  <ol>
+    <li>Address an APRS message to the service's callsign</li>
+    <li>Include your command or query in the message text</li>
+    <li>The service processes your request and sends a reply message</li>
+    <li>Your APRS device displays the response</li>
+  </ol>
+  
+  <p class="docs-note"><strong>Note:</strong> The services listed in this registry are primarily message services. Check each service's description for usage instructions.</p>
+</section>
+
+<section class="docs-section">
+  <h2>Other Service Types</h2>
+  
+  <h3>Trackers</h3>
+  <p>GPS-enabled devices that periodically beacon their position. Common in vehicles, aircraft, and for tracking assets.</p>
+  
+  <h3>Weather Stations</h3>
+  <p>Automated stations that transmit current weather conditions (temperature, humidity, wind, pressure, rain).</p>
+  
+  <h3>Telemetry Stations</h3>
+  <p>Stations that transmit sensor data, such as battery voltage, solar panel output, or environmental sensors.</p>
+  
+  <h3>Objects and Items</h3>
+  <p>Virtual markers placed on the APRS map, often used for events, hazards, or points of interest.</p>
+</section>
+
+<section class="docs-section">
+  <h2>Learn More</h2>
+  <ul>
+    <li><a href="http://www.aprs.org/" target="_blank" rel="noopener">APRS.org</a> &mdash; The official APRS website by Bob Bruninga, WB4APR (SK)</li>
+    <li><a href="http://www.aprs-is.net/" target="_blank" rel="noopener">APRS-IS.net</a> &mdash; Information about the APRS Internet Service</li>
+    <li><a href="https://aprs.fi/" target="_blank" rel="noopener">aprs.fi</a> &mdash; Popular APRS tracking website</li>
+  </ul>
+</section>
+{% endblock %}
