@@ -1,6 +1,6 @@
 """Tests for health checker module."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 
@@ -268,6 +268,191 @@ class TestCheckService:
         result = store.get_last_result("NOCOMMAND")
         assert result is not None
         assert result.success is True
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_active_to_pending_on_failure(self, mock_send):
+        """Active service transitions to pending on health check failure."""
+        from aprs_service_registry.health_checker import check_service
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="active",
+                health_check_command="ping",
+            ),
+        )
+
+        # Mock timeout
+        mock_send.return_value = (None, None)
+
+        check_service("TESTCALL")
+
+        # Verify status changed to pending
+        service = services["TESTCALL"]
+        service_dict = (
+            service.model_dump() if hasattr(service, "model_dump") else service.dict()
+        )
+        assert service_dict["status"] == "pending"
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_pending_to_active_on_success(self, mock_send):
+        """Pending service transitions to active on health check success."""
+        from aprs_service_registry.health_checker import check_service
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="pending",
+                health_check_command="ping",
+            ),
+        )
+
+        # Mock success
+        mock_send.return_value = ("Pong!", 500)
+
+        check_service("TESTCALL")
+
+        # Verify status changed to active
+        service = services["TESTCALL"]
+        service_dict = (
+            service.model_dump() if hasattr(service, "model_dump") else service.dict()
+        )
+        assert service_dict["status"] == "active"
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_down_to_active_on_success(self, mock_send):
+        """Down service transitions to active on health check success."""
+        from aprs_service_registry.health_checker import check_service
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="down",
+                health_check_command="ping",
+            ),
+        )
+
+        # Mock success
+        mock_send.return_value = ("Pong!", 500)
+
+        check_service("TESTCALL")
+
+        # Verify status changed to active
+        service = services["TESTCALL"]
+        service_dict = (
+            service.model_dump() if hasattr(service, "model_dump") else service.dict()
+        )
+        assert service_dict["status"] == "active"
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_pending_to_down_after_24h(self, mock_send):
+        """Pending service transitions to down after 24h of failures."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckResult,
+            HealthCheckStore,
+            check_service,
+        )
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="pending",
+                health_check_command="ping",
+            ),
+        )
+
+        # Add a failure result from 25 hours ago
+        store = HealthCheckStore()
+        old_failure = HealthCheckResult(
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=25),
+            success=False,
+            response_time_ms=None,
+            response_text=None,
+            error="Timeout",
+        )
+        store.add_result("TESTCALL", old_failure)
+
+        # Mock another timeout
+        mock_send.return_value = (None, None)
+
+        check_service("TESTCALL")
+
+        # Verify status changed to down
+        service = services["TESTCALL"]
+        service_dict = (
+            service.model_dump() if hasattr(service, "model_dump") else service.dict()
+        )
+        assert service_dict["status"] == "down"
+
+    @patch("aprs_service_registry.health_checker.send_and_wait_for_response")
+    def test_check_service_pending_stays_pending_under_24h(self, mock_send):
+        """Pending service stays pending if failures are under 24h."""
+        from aprs_service_registry.health_checker import (
+            HealthCheckResult,
+            HealthCheckStore,
+            check_service,
+        )
+        from aprs_service_registry.main import APRSServices, registryRequest
+
+        services = APRSServices()
+        services.add(
+            "TESTCALL",
+            registryRequest(
+                callsign="TESTCALL",
+                description="Test",
+                service_website="https://test.com",
+                software="test",
+                status="pending",
+                health_check_command="ping",
+            ),
+        )
+
+        # Add a failure result from 12 hours ago (under 24h threshold)
+        store = HealthCheckStore()
+        recent_failure = HealthCheckResult(
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=12),
+            success=False,
+            response_time_ms=None,
+            response_text=None,
+            error="Timeout",
+        )
+        store.add_result("TESTCALL", recent_failure)
+
+        # Mock another timeout
+        mock_send.return_value = (None, None)
+
+        check_service("TESTCALL")
+
+        # Verify status stays pending
+        service = services["TESTCALL"]
+        service_dict = (
+            service.model_dump() if hasattr(service, "model_dump") else service.dict()
+        )
+        assert service_dict["status"] == "pending"
 
 
 class TestScheduler:

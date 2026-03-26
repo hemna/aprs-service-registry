@@ -18,6 +18,7 @@ CONF = cfg.CONF
 
 MAX_RESULTS_PER_SERVICE = 3
 SECONDS_PER_HOUR = 3600
+PENDING_TO_DOWN_HOURS = 24  # Hours of failures before pending -> down
 
 # Global flag to track if APRSD client is initialized
 _aprsd_initialized = False
@@ -469,9 +470,13 @@ def check_service(callsign: str) -> None:
 
     Skips services that are:
     - Deleted (status == "deleted")
-    - Missing health_check_command
+
+    Status transitions:
+    - On SUCCESS: pending/down -> active
+    - On FAILURE: active -> pending
+    - On FAILURE (after 24h of failures): pending -> down
     """
-    from aprs_service_registry.main import APRSServices
+    from aprs_service_registry.main import APRSServices, registryRequest
 
     services = APRSServices()
     store = HealthCheckStore()
@@ -486,8 +491,8 @@ def check_service(callsign: str) -> None:
     service_dict = _service_to_dict(service)
 
     # Skip deleted services
-    status = service_dict.get("status", "active")
-    if status == "deleted":
+    current_status = service_dict.get("status", "active")
+    if current_status == "deleted":
         LOG.debug(f"Skipping health check for deleted service {callsign}")
         return
 
@@ -522,6 +527,9 @@ def check_service(callsign: str) -> None:
                 f"(arrived after {response_time_ms}ms)"
             )
 
+    # Determine new status based on result
+    new_status = current_status  # Default: no change
+
     # Record result
     if response_text is not None:
         result = HealthCheckResult(
@@ -532,6 +540,13 @@ def check_service(callsign: str) -> None:
             error=None,
         )
         LOG.info(f"Health check for {callsign}: SUCCESS ({response_time_ms}ms)")
+
+        # SUCCESS: If pending or down, transition to active
+        if current_status in ("pending", "down"):
+            new_status = "active"
+            LOG.info(
+                f"Service {callsign}: {current_status} -> active (health check passed)"
+            )
     else:
         result = HealthCheckResult(
             timestamp=datetime.now(timezone.utc),
@@ -542,7 +557,42 @@ def check_service(callsign: str) -> None:
         )
         LOG.warning(f"Health check for {callsign}: TIMEOUT")
 
+        # FAILURE: Determine status transition
+        if current_status == "active":
+            # active -> pending on first failure
+            new_status = "pending"
+            LOG.warning(f"Service {callsign}: active -> pending (health check failed)")
+        elif current_status == "pending":
+            # Check if we've been failing for 24+ hours
+            # Look at historical results to find when failures started
+            results = store.get_results(callsign.upper())
+            if results:
+                # Find the first consecutive failure timestamp
+                first_failure_time = None
+                for r in reversed(results):  # Oldest first
+                    if r.success:
+                        first_failure_time = None  # Reset on success
+                    elif first_failure_time is None:
+                        first_failure_time = r.timestamp
+
+                if first_failure_time:
+                    hours_failing = (
+                        datetime.now(timezone.utc) - first_failure_time
+                    ).total_seconds() / 3600
+                    if hours_failing >= PENDING_TO_DOWN_HOURS:
+                        new_status = "down"
+                        LOG.warning(
+                            f"Service {callsign}: pending -> down "
+                            f"(failing for {hours_failing:.1f} hours)"
+                        )
+
     store.add_and_persist_result(callsign, result)
+
+    # Update service status if changed
+    if new_status != current_status:
+        service_dict["status"] = new_status
+        updated_service = registryRequest(**service_dict)
+        services.add_and_persist(callsign.upper(), updated_service)
 
 
 def calculate_stagger_interval(num_services: int) -> int | None:

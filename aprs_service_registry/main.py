@@ -107,7 +107,7 @@ class registryRequest(BaseModel):
     service_website: str
     software: str
     callsign_owner: str | None = None
-    status: Literal["active", "down", "deleted"] = "active"
+    status: Literal["active", "pending", "down", "deleted"] = "active"
     health_check_command: str | None = None
 
 
@@ -168,7 +168,7 @@ async def get(request: Request):
         service_dict = service_to_dict(service)
         status = service_dict["status"]
 
-        if status in ("active", "down"):
+        if status in ("active", "pending", "down"):
             filtered_services[callsign] = service
             # Get health check result
             health_checks[callsign] = store.get_last_result(callsign)
