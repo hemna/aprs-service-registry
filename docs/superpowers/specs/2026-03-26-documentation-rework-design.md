@@ -112,6 +112,9 @@ All documentation pages share a consistent layout:
 - Prerequisites (callsign, service running)
 - Registration process
 - Keep-alive / health check requirements
+  - Health checks run hourly via HTTP POST to `/api/v1/health-check/{callsign}`
+  - Include a timestamp in the request body
+  - Response status indicates pass/fail
 - Updating your service information
 - Removing your service
 
@@ -122,14 +125,24 @@ All documentation pages share a consistent layout:
 **Sections:**
 - Quick Start (TL;DR) — fetch all services in 30 seconds
 - API Overview
-- Base URL and versioning
-- Authentication (if any) / Rate limits
+- Base URL and Versioning
+  - Base URL: `https://aprs-service-registry.hemna.com`
+  - Version: URL path prefix `/api/v1/`
+- Authentication
+  - Currently: **No authentication required** — public API
+  - Note: Authentication may be added for write operations in the future
+- Rate Limits
+  - Currently: **No rate limits**
+  - Recommendation: Be reasonable (avoid hammering the API)
 - Endpoints summary table
+- Error Responses
+  - HTTP status codes used: 200, 201, 400, 404, 500
+  - Error response format: `{"detail": "error message"}`
 - Code examples for each major operation:
-  - List all services
-  - Get a specific service
-  - Register a service
-  - Health check / keep-alive
+  - List all services (`GET /api/v1/registry`)
+  - Get a specific service (`GET /api/v1/registry/{callsign}`)
+  - Register a service (`POST /api/v1/registry`)
+  - Health check / keep-alive (`POST /api/v1/health-check/{callsign}`)
 - Link to full API reference (Swagger/ReDoc)
 
 **Code Example Languages:**
@@ -137,6 +150,55 @@ All documentation pages share a consistent layout:
 - Python (requests library)
 - JavaScript (fetch API)
 - Go (net/http)
+
+**Code Example Structure:**
+```
+### List All Services
+Fetch all registered APRS services.
+
+#### curl
+```bash
+curl https://aprs-service-registry.hemna.com/api/v1/registry
+```
+
+#### Python
+```python
+import requests
+response = requests.get("https://aprs-service-registry.hemna.com/api/v1/registry")
+services = response.json()
+print(services)
+```
+
+#### JavaScript
+```javascript
+const response = await fetch("https://aprs-service-registry.hemna.com/api/v1/registry");
+const services = await response.json();
+console.log(services);
+```
+
+#### Go
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+func main() {
+    resp, err := http.Get("https://aprs-service-registry.hemna.com/api/v1/registry")
+    if err != nil {
+        panic(err)
+    }
+    defer resp.Body.Close()
+    
+    var services interface{}
+    json.NewDecoder(resp.Body).Decode(&services)
+    fmt.Printf("%v\n", services)
+}
+```
+```
 
 ### 4. Service Types Page (`/service-types`)
 
@@ -156,9 +218,16 @@ All documentation pages share a consistent layout:
 **Sections:**
 - Quick Start (common issues at a glance)
 - General Questions
+  - What is this site? / Is this official? / How often is data updated?
 - For Operators
+  - Why isn't my service showing? / How do I update my information?
+  - What happens if health checks fail? / How do I remove my service?
 - For Developers
+  - Is there rate limiting? / Can I use this data in my app?
+  - How do I report issues?
 - Health Check Questions
+  - What do the colored dots mean? / How is uptime calculated?
+  - Why does my service show as unhealthy?
 
 ## Technical Implementation
 
