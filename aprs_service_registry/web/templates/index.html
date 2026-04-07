@@ -112,11 +112,13 @@
                 <div class="heatmap">
                   {% set results = health_results.get(callsign, []) %}
                   {% set num_results = results|length %}
+                  {# Display oldest on left, newest on right #}
                   {% for i in range(24) %}
                     {% if i < (24 - num_results) %}
                       <div class="heatmap-dot dot-nodata" data-tooltip="No data"></div>
                     {% else %}
-                      {% set idx = i - (24 - num_results) %}
+                      {# Reverse index: oldest result first (results[0] is newest, so we count backwards) #}
+                      {% set idx = num_results - 1 - (i - (24 - num_results)) %}
                       {% if results[idx].success %}
                         <div class="heatmap-dot dot-success heatmap-dot-timed" 
                              data-utc="{{ results[idx].timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') }}"
