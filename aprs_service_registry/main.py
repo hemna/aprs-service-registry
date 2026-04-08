@@ -492,6 +492,9 @@ async def registry(request: Request, data: registryRequest):
                 # Don't allow re-registration to un-delete a service
                 request_dict["status"] = "deleted"
 
+        # ALWAYS preserve commands - they are admin-managed and services don't know about them
+        request_dict["commands"] = existing_dict.get("commands", [])
+
     request_upper = registryRequest(**request_dict)
     services.add_and_persist(callsign_upper, request_upper)
     for service in services:
