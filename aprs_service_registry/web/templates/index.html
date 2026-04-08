@@ -359,9 +359,17 @@ frequency_seconds = 900</code></pre>
           <label for="modal-command-desc">Description:</label>
           <input type="text" id="modal-command-desc" class="suggest-input" placeholder="What does this command do?" maxlength="200">
         </div>
+        <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          To submit, please verify your identity with your ham radio callsign and APRS passcode.
+        </p>
         <div class="suggest-form-group">
-          <label for="modal-submitted-by">Your callsign (optional):</label>
-          <input type="text" id="modal-submitted-by" class="suggest-input" placeholder="e.g., W1AW" maxlength="15">
+          <label for="modal-submitter-callsign">Your Callsign: <span style="color: var(--danger);">*</span></label>
+          <input type="text" id="modal-submitter-callsign" class="suggest-input" placeholder="e.g., W1AW" maxlength="15" required style="text-transform: uppercase;">
+        </div>
+        <div class="suggest-form-group">
+          <label for="modal-passcode">APRS Passcode: <span style="color: var(--danger);">*</span></label>
+          <input type="number" id="modal-passcode" class="suggest-input" placeholder="Your APRS passcode" min="0" max="32767" required>
         </div>
         <div id="modal-message" class="suggest-form-message" style="display: none;"></div>
       </div>
@@ -639,7 +647,8 @@ frequency_seconds = 900</code></pre>
   var modalCallsign = document.getElementById('modal-callsign');
   var modalCommandName = document.getElementById('modal-command-name');
   var modalCommandDesc = document.getElementById('modal-command-desc');
-  var modalSubmittedBy = document.getElementById('modal-submitted-by');
+  var modalSubmitterCallsign = document.getElementById('modal-submitter-callsign');
+  var modalPasscode = document.getElementById('modal-passcode');
   var modalMessage = document.getElementById('modal-message');
   var modalSubmitBtn = document.getElementById('modal-submit-btn');
 
@@ -650,7 +659,8 @@ frequency_seconds = 900</code></pre>
     // Clear previous values
     modalCommandName.value = '';
     modalCommandDesc.value = '';
-    modalSubmittedBy.value = '';
+    modalSubmitterCallsign.value = '';
+    modalPasscode.value = '';
     modalMessage.style.display = 'none';
     modalSubmitBtn.disabled = false;
     modalSubmitBtn.textContent = 'Submit';
@@ -674,7 +684,8 @@ frequency_seconds = 900</code></pre>
   window.submitModalCommand = function() {
     var commandName = modalCommandName.value.trim();
     var commandDesc = modalCommandDesc.value.trim();
-    var submittedBy = modalSubmittedBy.value.trim();
+    var submitterCallsign = modalSubmitterCallsign.value.trim().toUpperCase();
+    var passcode = modalPasscode.value.trim();
     
     // Validation
     if (!commandName) {
@@ -685,6 +696,18 @@ frequency_seconds = 900</code></pre>
     }
     if (!commandDesc) {
       modalMessage.textContent = 'Please enter a description.';
+      modalMessage.className = 'suggest-form-message error';
+      modalMessage.style.display = 'block';
+      return;
+    }
+    if (!submitterCallsign) {
+      modalMessage.textContent = 'Please enter your callsign.';
+      modalMessage.className = 'suggest-form-message error';
+      modalMessage.style.display = 'block';
+      return;
+    }
+    if (!passcode) {
+      modalMessage.textContent = 'Please enter your APRS passcode.';
       modalMessage.className = 'suggest-form-message error';
       modalMessage.style.display = 'block';
       return;
@@ -701,7 +724,8 @@ frequency_seconds = 900</code></pre>
       body: JSON.stringify({
         command_name: commandName,
         command_description: commandDesc,
-        submitted_by: submittedBy || null
+        submitter_callsign: submitterCallsign,
+        passcode: parseInt(passcode, 10)
       })
     })
     .then(function(response) {
@@ -717,7 +741,8 @@ frequency_seconds = 900</code></pre>
         // Clear inputs
         modalCommandName.value = '';
         modalCommandDesc.value = '';
-        modalSubmittedBy.value = '';
+        modalSubmitterCallsign.value = '';
+        modalPasscode.value = '';
         // Close modal after 2 seconds
         setTimeout(function() {
           closeSuggestModal();

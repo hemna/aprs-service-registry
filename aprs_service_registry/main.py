@@ -576,12 +576,61 @@ async def trigger_all_health_checks(request: Request):
 # ---- Command Submission API ----
 
 
+def calculate_aprs_passcode(callsign: str) -> int:
+    """Calculate APRS passcode for a callsign.
+
+    The APRS passcode algorithm:
+    1. Take the callsign without SSID (strip -N suffix)
+    2. Convert to uppercase
+    3. XOR pairs of characters with 0x73e2 as seed
+    4. Mask to 15 bits (& 0x7fff)
+
+    Args:
+        callsign: Ham radio callsign (with or without SSID)
+
+    Returns:
+        Calculated APRS passcode (0-32767)
+    """
+    # Remove SSID if present (e.g., WB4BOR-14 -> WB4BOR)
+    call = callsign.upper().split("-")[0]
+
+    # Initial hash value
+    hash_val = 0x73E2
+
+    # Process pairs of characters
+    i = 0
+    while i < len(call):
+        hash_val ^= ord(call[i]) << 8
+        i += 1
+        if i < len(call):
+            hash_val ^= ord(call[i])
+            i += 1
+
+    # Mask to 15 bits
+    return hash_val & 0x7FFF
+
+
+def verify_aprs_passcode(callsign: str, passcode: int) -> bool:
+    """Verify an APRS passcode for a callsign.
+
+    Args:
+        callsign: Ham radio callsign
+        passcode: Claimed APRS passcode
+
+    Returns:
+        True if passcode is valid, False otherwise
+    """
+    expected = calculate_aprs_passcode(callsign)
+    return passcode == expected
+
+
 class CommandSubmission(BaseModel):
     """Request to submit a command suggestion."""
 
     command_name: str
     command_description: str
-    submitted_by: str | None = None
+    submitter_callsign: str
+    passcode: int
 
 
 @app.post("/api/v1/services/{callsign}/commands", response_class=JSONResponse)
@@ -590,6 +639,21 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
     """Submit a command suggestion for a service (goes to moderation queue)."""
     services = APRSServices()
     callsign_upper = callsign.upper()
+    submitter_callsign = data.submitter_callsign.strip().upper()
+
+    # Validate submitter callsign format (basic check)
+    if not submitter_callsign or len(submitter_callsign) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a valid callsign",
+        )
+
+    # Verify APRS passcode
+    if not verify_aprs_passcode(submitter_callsign, data.passcode):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid APRS passcode for the provided callsign",
+        )
 
     # Verify service exists
     try:
@@ -607,7 +671,7 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
         command_name=data.command_name.strip(),
         command_description=data.command_description.strip(),
         submitted_at=datetime.now(timezone.utc),
-        submitted_by=data.submitted_by.strip() if data.submitted_by else None,
+        submitted_by=submitter_callsign,
     )
 
     # Add to pending store
@@ -615,7 +679,7 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
     store.add(pending)
 
     LOG.info(
-        f"Command suggestion submitted for {callsign_upper}: '{pending.command_name}'"
+        f"Command suggestion submitted for {callsign_upper}: '{pending.command_name}' by {submitter_callsign}"
     )
 
     return {
