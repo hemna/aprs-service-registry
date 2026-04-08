@@ -59,8 +59,8 @@
         {% endif %}
       </td>
       <td>
-        {% if service.uptime is not none %}
-          {{ "%.1f"|format(service.uptime) }}%
+        {% if service.uptime and service.uptime != '--' %}
+          {{ service.uptime }}
         {% else %}
           —
         {% endif %}

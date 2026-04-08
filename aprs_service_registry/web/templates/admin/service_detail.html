@@ -22,8 +22,8 @@
     {% else %}
       <span class="health-badge">{{ service.status }}</span>
     {% endif %}
-    {% if uptime is not none %}
-      &nbsp;&middot;&nbsp; {{ "%.1f"|format(uptime) }}% uptime
+    {% if uptime and uptime != '--' %}
+      &nbsp;&middot;&nbsp; {{ uptime }} uptime
     {% endif %}
   </p>
 </div>

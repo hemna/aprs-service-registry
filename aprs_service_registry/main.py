@@ -969,7 +969,8 @@ async def admin_services(
         last_result = health_store.get_last_result(callsign)
         if last_result:
             service_dict["last_health_check"] = last_result
-            service_dict["uptime"] = calculate_uptime(callsign)
+            results = health_store.get_results(callsign)
+            service_dict["uptime"] = calculate_uptime(results)
         else:
             service_dict["last_health_check"] = None
             service_dict["uptime"] = None
@@ -1013,7 +1014,7 @@ async def admin_service_detail(
 
     # Get health check history
     health_results = health_store.get_results(callsign_upper, limit=50)
-    uptime = calculate_uptime(callsign_upper)
+    uptime = calculate_uptime(health_results)
 
     return templates.TemplateResponse(
         request=request,
