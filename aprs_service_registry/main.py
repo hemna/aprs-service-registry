@@ -1214,6 +1214,9 @@ async def admin_edit_service(
     service_dict["health_check_command"] = form.get(
         "health_check_command", service_dict.get("health_check_command")
     )
+    # Preserve commands - they are not editable via this form
+    # (commands are managed via the command moderation system)
+    service_dict["commands"] = service_dict.get("commands", [])
 
     updated_service = registryRequest(**service_dict)
     services.add_and_persist(callsign_upper, updated_service)
