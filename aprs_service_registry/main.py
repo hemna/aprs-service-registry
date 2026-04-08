@@ -848,9 +848,9 @@ async def admin_dashboard(
     pending_commands = len(pending_store.data)
 
     return templates.TemplateResponse(
-        "admin/dashboard.html",
-        {
-            "request": request,
+        request=request,
+        name="admin/dashboard.html",
+        context={
             "total_services": total_services,
             "active_services": active_services,
             "pending_services": pending_services,
@@ -875,9 +875,9 @@ async def admin_commands(
     pending_list.sort(key=lambda x: x.submitted_at, reverse=True)
 
     return templates.TemplateResponse(
-        "admin/commands.html",
-        {
-            "request": request,
+        request=request,
+        name="admin/commands.html",
+        context={
             "pending_commands": pending_list,
         },
     )
@@ -980,9 +980,9 @@ async def admin_services(
     service_list.sort(key=lambda x: x["callsign"])
 
     return templates.TemplateResponse(
-        "admin/services.html",
-        {
-            "request": request,
+        request=request,
+        name="admin/services.html",
+        context={
             "services": service_list,
         },
     )
@@ -1016,9 +1016,9 @@ async def admin_service_detail(
     uptime = calculate_uptime(callsign_upper)
 
     return templates.TemplateResponse(
-        "admin/service_detail.html",
-        {
-            "request": request,
+        request=request,
+        name="admin/service_detail.html",
+        context={
             "service": service_dict,
             "health_results": health_results,
             "uptime": uptime,
