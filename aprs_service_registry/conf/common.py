@@ -68,6 +68,16 @@ registry_opts = [
         default=60,
         help="Seconds to wait for health check response.",
     ),
+    cfg.StrOpt(
+        "admin_username",
+        default="admin",
+        help="Username for admin interface.",
+    ),
+    cfg.StrOpt(
+        "admin_password",
+        default="",
+        help="Password for admin interface. If empty, admin is disabled.",
+    ),
 ]
 
 

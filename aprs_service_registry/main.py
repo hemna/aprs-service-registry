@@ -1,14 +1,16 @@
 import json
+import secrets
 import threading
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import wrapt
-from fastapi import FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
@@ -109,6 +111,37 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
+
+# HTTP Basic Auth for admin routes
+security = HTTPBasic()
+
+
+def verify_admin(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+    """Verify admin credentials using HTTP Basic Auth."""
+    admin_username = CONF.registry.admin_username
+    admin_password = CONF.registry.admin_password
+
+    if not admin_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin interface is disabled",
+        )
+
+    is_valid_username = secrets.compare_digest(
+        credentials.username.encode("utf-8"),
+        admin_username.encode("utf-8"),
+    )
+    is_valid_password = secrets.compare_digest(
+        credentials.password.encode("utf-8"),
+        admin_password.encode("utf-8"),
+    )
+
+    if not (is_valid_username and is_valid_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
 
 class ServiceCommand(BaseModel):
@@ -782,3 +815,312 @@ async def websocket_endpoint(websocket: WebSocket):
             print(e)
             break
     LOG.debug("CONNECTION DEAD...")
+
+
+# ============================================================================
+# Admin Web Interface Routes
+# ============================================================================
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Admin dashboard - overview page."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    health_store = HealthCheckStore()
+    pending_store = PendingCommandStore()
+
+    # Gather stats
+    total_services = len(services.data)
+    active_services = sum(
+        1 for s in services.data.values() if getattr(s, "status", "active") == "active"
+    )
+    pending_services = sum(
+        1 for s in services.data.values() if getattr(s, "status", None) == "pending"
+    )
+    down_services = sum(
+        1 for s in services.data.values() if getattr(s, "status", None) == "down"
+    )
+    pending_commands = len(pending_store.data)
+
+    return templates.TemplateResponse(
+        "admin/dashboard.html",
+        {
+            "request": request,
+            "total_services": total_services,
+            "active_services": active_services,
+            "pending_services": pending_services,
+            "down_services": down_services,
+            "pending_commands": pending_commands,
+        },
+    )
+
+
+@app.get("/admin/commands", response_class=HTMLResponse)
+async def admin_commands(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Admin page for moderating command suggestions."""
+    verify_admin(credentials)
+
+    pending_store = PendingCommandStore()
+    pending_list = list(pending_store.data.values())
+
+    # Sort by submission time (newest first)
+    pending_list.sort(key=lambda x: x.submitted_at, reverse=True)
+
+    return templates.TemplateResponse(
+        "admin/commands.html",
+        {
+            "request": request,
+            "pending_commands": pending_list,
+        },
+    )
+
+
+@app.post("/admin/commands/{id}/approve", response_class=HTMLResponse)
+async def admin_approve_command(
+    request: Request,
+    id: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Approve a pending command (admin web interface)."""
+    verify_admin(credentials)
+
+    pending_store = PendingCommandStore()
+    services = APRSServices()
+
+    pending = pending_store.get(id)
+    if not pending:
+        raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
+
+    # Get existing service
+    try:
+        service = services[pending.callsign]
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{pending.callsign}' not found"
+        )
+
+    # Add command to service
+    service_dict = service_to_dict(service)
+    commands = service_dict.get("commands", [])
+    commands.append(
+        {"name": pending.command_name, "description": pending.command_description}
+    )
+    service_dict["commands"] = commands
+
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(pending.callsign, updated_service)
+
+    # Remove from pending
+    pending_store.remove(id)
+
+    LOG.info(f"Admin approved command '{pending.command_name}' for {pending.callsign}")
+
+    return RedirectResponse(url="/admin/commands", status_code=303)
+
+
+@app.post("/admin/commands/{id}/reject", response_class=HTMLResponse)
+async def admin_reject_command(
+    request: Request,
+    id: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Reject a pending command (admin web interface)."""
+    verify_admin(credentials)
+
+    pending_store = PendingCommandStore()
+
+    pending = pending_store.get(id)
+    if not pending:
+        raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
+
+    pending_store.remove(id)
+
+    LOG.info(f"Admin rejected command '{pending.command_name}' for {pending.callsign}")
+
+    return RedirectResponse(url="/admin/commands", status_code=303)
+
+
+@app.get("/admin/services", response_class=HTMLResponse)
+async def admin_services(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Admin page for managing services."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    health_store = HealthCheckStore()
+
+    # Build service list with health info
+    service_list = []
+    for callsign, service in services.data.items():
+        service_dict = service_to_dict(service)
+        service_dict["callsign"] = callsign
+
+        # Add health info
+        last_result = health_store.get_last_result(callsign)
+        if last_result:
+            service_dict["last_health_check"] = last_result
+            service_dict["uptime"] = calculate_uptime(callsign)
+        else:
+            service_dict["last_health_check"] = None
+            service_dict["uptime"] = None
+
+        service_list.append(service_dict)
+
+    # Sort by callsign
+    service_list.sort(key=lambda x: x["callsign"])
+
+    return templates.TemplateResponse(
+        "admin/services.html",
+        {
+            "request": request,
+            "services": service_list,
+        },
+    )
+
+
+@app.get("/admin/services/{callsign}", response_class=HTMLResponse)
+async def admin_service_detail(
+    request: Request,
+    callsign: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Admin page for viewing/editing a single service."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    health_store = HealthCheckStore()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+
+    service_dict = service_to_dict(service)
+    service_dict["callsign"] = callsign_upper
+
+    # Get health check history
+    health_results = health_store.get_results(callsign_upper, limit=50)
+    uptime = calculate_uptime(callsign_upper)
+
+    return templates.TemplateResponse(
+        "admin/service_detail.html",
+        {
+            "request": request,
+            "service": service_dict,
+            "health_results": health_results,
+            "uptime": uptime,
+        },
+    )
+
+
+@app.post("/admin/services/{callsign}/edit", response_class=HTMLResponse)
+async def admin_edit_service(
+    request: Request,
+    callsign: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Update a service (admin web interface)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+
+    # Get form data
+    form = await request.form()
+
+    service_dict = service_to_dict(service)
+    service_dict["description"] = form.get(
+        "description", service_dict.get("description", "")
+    )
+    service_dict["service_website"] = form.get(
+        "service_website", service_dict.get("service_website", "")
+    )
+    service_dict["software"] = form.get("software", service_dict.get("software", ""))
+    service_dict["callsign_owner"] = form.get(
+        "callsign_owner", service_dict.get("callsign_owner")
+    )
+    service_dict["status"] = form.get("status", service_dict.get("status", "active"))
+    service_dict["health_check_command"] = form.get(
+        "health_check_command", service_dict.get("health_check_command")
+    )
+
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign_upper, updated_service)
+
+    LOG.info(f"Admin updated service {callsign_upper}")
+
+    return RedirectResponse(url=f"/admin/services/{callsign_upper}", status_code=303)
+
+
+@app.post("/admin/services/{callsign}/delete", response_class=HTMLResponse)
+async def admin_delete_service(
+    request: Request,
+    callsign: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Delete a service (admin web interface)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        del services[callsign_upper]
+        services.save()
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+
+    LOG.info(f"Admin deleted service {callsign_upper}")
+
+    return RedirectResponse(url="/admin/services", status_code=303)
+
+
+@app.post("/admin/services/{callsign}/health-check", response_class=HTMLResponse)
+async def admin_trigger_health_check(
+    request: Request,
+    callsign: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Trigger a health check for a service (admin web interface)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+
+    # Trigger health check in background
+    import asyncio
+
+    asyncio.create_task(check_service(callsign_upper, service))
+
+    LOG.info(f"Admin triggered health check for {callsign_upper}")
+
+    return RedirectResponse(url=f"/admin/services/{callsign_upper}", status_code=303)

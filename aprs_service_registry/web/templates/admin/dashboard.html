@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+  <h1>Dashboard</h1>
+  <p>Overview of the APRS Service Registry</p>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-card-label">Total Services</div>
+    <div class="stat-card-value">{{ total_services }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-label">Active</div>
+    <div class="stat-card-value success">{{ active_services }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-label">Pending</div>
+    <div class="stat-card-value warning">{{ pending_services }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-label">Down</div>
+    <div class="stat-card-value danger">{{ down_services }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-label">Command Suggestions</div>
+    <div class="stat-card-value accent">{{ pending_commands }}</div>
+  </div>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-header">Quick Actions</div>
+  <div class="admin-card-body">
+    <div class="admin-actions">
+      <a href="/admin/commands" class="admin-btn admin-btn-primary">
+        Review Command Suggestions
+        {% if pending_commands > 0 %}({{ pending_commands }}){% endif %}
+      </a>
+      <a href="/admin/services" class="admin-btn admin-btn-secondary">
+        Manage Services
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

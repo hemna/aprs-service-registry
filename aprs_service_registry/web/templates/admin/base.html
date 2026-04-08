@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Admin{% endblock %} - APRS Service Registry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/main.css">
+  <style>
+    /* Admin-specific styles */
+    .admin-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    .admin-sidebar {
+      width: 240px;
+      background: var(--bg-elevated);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 0;
+      flex-shrink: 0;
+    }
+    
+    .admin-sidebar-header {
+      padding: 0 1.5rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    
+    .admin-sidebar-header h2 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    
+    .admin-sidebar-header p {
+      margin: 0.25rem 0 0;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    
+    .admin-nav {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .admin-nav a {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.5rem;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: all var(--transition);
+    }
+    
+    .admin-nav a:hover {
+      background: var(--bg);
+    }
+    
+    .admin-nav a.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    
+    .admin-nav-icon {
+      width: 18px;
+      height: 18px;
+      opacity: 0.7;
+    }
+    
+    .admin-nav a.active .admin-nav-icon {
+      opacity: 1;
+    }
+    
+    .admin-nav-badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+    }
+    
+    .admin-main {
+      flex: 1;
+      padding: 2rem;
+      background: var(--bg);
+      overflow-y: auto;
+    }
+    
+    .admin-header {
+      margin-bottom: 2rem;
+    }
+    
+    .admin-header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    
+    .admin-header p {
+      margin: 0.5rem 0 0;
+      color: var(--text-muted);
+    }
+    
+    /* Stats cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+    }
+    
+    .stat-card-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    
+    .stat-card-value {
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    
+    .stat-card-value.success { color: #198754; }
+    .stat-card-value.warning { color: #ffc107; }
+    .stat-card-value.danger { color: #dc3545; }
+    .stat-card-value.accent { color: var(--accent); }
+    
+    /* Admin table */
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-elevated);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    
+    .admin-table th,
+    .admin-table td {
+      padding: 0.875rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .admin-table th {
+      background: var(--bg);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+    
+    .admin-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .admin-table tr:hover td {
+      background: var(--bg);
+    }
+    
+    /* Admin buttons */
+    .admin-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+      text-decoration: none;
+      border: none;
+    }
+    
+    .admin-btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    
+    .admin-btn-primary:hover {
+      background: var(--accent-hover);
+    }
+    
+    .admin-btn-success {
+      background: #198754;
+      color: #fff;
+    }
+    
+    .admin-btn-success:hover {
+      background: #157347;
+    }
+    
+    .admin-btn-danger {
+      background: #dc3545;
+      color: #fff;
+    }
+    
+    .admin-btn-danger:hover {
+      background: #bb2d3b;
+    }
+    
+    .admin-btn-secondary {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    
+    .admin-btn-secondary:hover {
+      border-color: var(--border-strong);
+    }
+    
+    .admin-btn-sm {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem;
+    }
+    
+    /* Admin forms */
+    .admin-form-group {
+      margin-bottom: 1.25rem;
+    }
+    
+    .admin-form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    
+    .admin-input,
+    .admin-select,
+    .admin-textarea {
+      width: 100%;
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      padding: 0.625rem 0.875rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      color: var(--text);
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    
+    .admin-input:focus,
+    .admin-select:focus,
+    .admin-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    
+    .admin-textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+    
+    /* Admin card */
+    .admin-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 1.5rem;
+    }
+    
+    .admin-card-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    
+    .admin-card-body {
+      padding: 1.25rem;
+    }
+    
+    /* Empty state */
+    .admin-empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-muted);
+    }
+    
+    .admin-empty-icon {
+      width: 48px;
+      height: 48px;
+      opacity: 0.5;
+      margin-bottom: 1rem;
+    }
+    
+    /* Action buttons row */
+    .admin-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    
+    /* Back link */
+    .admin-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    
+    .admin-back:hover {
+      color: var(--text);
+    }
+    
+    /* Health check styles */
+    .health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    
+    .health-badge.success {
+      background: rgba(25, 135, 84, 0.1);
+      color: #198754;
+    }
+    
+    .health-badge.failure {
+      background: rgba(220, 53, 69, 0.1);
+      color: #dc3545;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .admin-layout {
+        flex-direction: column;
+      }
+      
+      .admin-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 1rem 0;
+      }
+      
+      .admin-nav {
+        display: flex;
+        overflow-x: auto;
+        padding: 0 1rem;
+      }
+      
+      .admin-nav a {
+        padding: 0.5rem 1rem;
+        white-space: nowrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-layout">
+    <aside class="admin-sidebar">
+      <div class="admin-sidebar-header">
+        <h2>Admin Panel</h2>
+        <p><a href="/" style="color: var(--accent); text-decoration: none;">← Back to site</a></p>
+      </div>
+      <nav>
+        <ul class="admin-nav">
+          <li>
+            <a href="/admin" class="{% if request.url.path == '/admin' %}active{% endif %}">
+              <svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              Dashboard
+            </a>
+          </li>
+          <li>
+            <a href="/admin/commands" class="{% if '/admin/commands' in request.url.path %}active{% endif %}">
+              <svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Command Queue
+              {% if pending_commands is defined and pending_commands > 0 %}
+              <span class="admin-nav-badge">{{ pending_commands }}</span>
+              {% endif %}
+            </a>
+          </li>
+          <li>
+            <a href="/admin/services" class="{% if '/admin/services' in request.url.path %}active{% endif %}">
+              <svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+              Services
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </aside>
+    
+    <main class="admin-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    // Apply theme
+    (function() {
+      var theme = localStorage.getItem('theme');
+      if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+</body>
+</html>

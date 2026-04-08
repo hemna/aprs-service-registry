@@ -1,0 +1,58 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Command Queue{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+  <h1>Command Suggestions</h1>
+  <p>Review and moderate user-submitted command suggestions</p>
+</div>
+
+{% if pending_commands %}
+<table class="admin-table">
+  <thead>
+    <tr>
+      <th>Service</th>
+      <th>Command</th>
+      <th>Description</th>
+      <th>Submitted By</th>
+      <th>Submitted</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cmd in pending_commands %}
+    <tr>
+      <td><code style="font-family: var(--font-mono); font-weight: 600;">{{ cmd.callsign }}</code></td>
+      <td><code style="font-family: var(--font-mono); color: var(--accent);">{{ cmd.command_name }}</code></td>
+      <td>{{ cmd.command_description }}</td>
+      <td>{{ cmd.submitted_by or '—' }}</td>
+      <td>
+        <span title="{{ cmd.submitted_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC">
+          {{ cmd.submitted_at.strftime('%Y-%m-%d %H:%M') }}
+        </span>
+      </td>
+      <td>
+        <div class="admin-actions">
+          <form action="/admin/commands/{{ cmd.id }}/approve" method="POST" style="display: inline;">
+            <button type="submit" class="admin-btn admin-btn-success admin-btn-sm">Approve</button>
+          </form>
+          <form action="/admin/commands/{{ cmd.id }}/reject" method="POST" style="display: inline;" 
+                onsubmit="return confirm('Reject this command suggestion?');">
+            <button type="submit" class="admin-btn admin-btn-danger admin-btn-sm">Reject</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="admin-empty">
+  <svg class="admin-empty-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+  <p>No pending command suggestions</p>
+</div>
+{% endif %}
+{% endblock %}
