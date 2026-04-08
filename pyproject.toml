@@ -29,6 +29,7 @@ dependencies = [
     "jinja2",
     "loguru",
     "oslo.config",
+    "python-multipart",
     "slowapi",
     "typing-inspect",
     "uvicorn",
