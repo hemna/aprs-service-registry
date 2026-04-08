@@ -856,6 +856,7 @@ async def admin_dashboard(
             "pending_services": pending_services,
             "down_services": down_services,
             "pending_commands": pending_commands,
+            "pending_commands_count": pending_commands,
         },
     )
 
@@ -888,6 +889,7 @@ async def admin_commands(
         name="admin/commands.html",
         context={
             "pending_commands": pending_list,
+            "pending_commands_count": len(pending_list),
         },
     )
 
@@ -989,11 +991,16 @@ async def admin_services(
     # Sort by callsign
     service_list.sort(key=lambda x: x["callsign"])
 
+    # Get pending commands count for sidebar badge
+    pending_store = PendingCommandStore()
+    pending_commands_count = len(pending_store.data)
+
     return templates.TemplateResponse(
         request=request,
         name="admin/services.html",
         context={
             "services": service_list,
+            "pending_commands_count": pending_commands_count,
         },
     )
 
@@ -1025,6 +1032,10 @@ async def admin_service_detail(
     health_results = health_store.get_results(callsign_upper)[:50]
     uptime = calculate_uptime(health_results)
 
+    # Get pending commands count for sidebar badge
+    pending_store = PendingCommandStore()
+    pending_commands_count = len(pending_store.data)
+
     return templates.TemplateResponse(
         request=request,
         name="admin/service_detail.html",
@@ -1032,6 +1043,7 @@ async def admin_service_detail(
             "service": service_dict,
             "health_results": health_results,
             "uptime": uptime,
+            "pending_commands_count": pending_commands_count,
         },
     )
 
