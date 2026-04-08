@@ -871,8 +871,17 @@ async def admin_commands(
     pending_store = PendingCommandStore()
     pending_list = list(pending_store.data.values())
 
-    # Sort by submission time (newest first)
-    pending_list.sort(key=lambda x: x.submitted_at, reverse=True)
+    # Sort by submission time (newest first), handling potential data issues
+    try:
+        pending_list.sort(
+            key=lambda x: (
+                x.submitted_at if isinstance(x.submitted_at, datetime) else datetime.min
+            ),
+            reverse=True,
+        )
+    except (TypeError, AttributeError):
+        # If sorting fails, just use unsorted list
+        pass
 
     return templates.TemplateResponse(
         request=request,
@@ -1013,7 +1022,7 @@ async def admin_service_detail(
     service_dict["callsign"] = callsign_upper
 
     # Get health check history
-    health_results = health_store.get_results(callsign_upper, limit=50)
+    health_results = health_store.get_results(callsign_upper)[:50]
     uptime = calculate_uptime(health_results)
 
     return templates.TemplateResponse(
