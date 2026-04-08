@@ -20,7 +20,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from aprs_service_registry import conf, objectstore, utils  # noqa
+from aprs_service_registry import conf, gitstore, objectstore, utils  # noqa
 from aprs_service_registry.health_checker import (
     HealthCheckStore,
     calculate_uptime,
@@ -85,9 +85,18 @@ def attach_last_health_check(service_dict: dict, callsign: str, store) -> None:
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
     # Startup: Load services and health check results from disk
-    APRSServices().load()
-    HealthCheckStore().load()
-    PendingCommandStore().load()
+    # Try git backup first (preferred), fall back to pickle
+    services = APRSServices()
+    if not services.git_load():
+        services.load()
+
+    health_store = HealthCheckStore()
+    if not health_store.git_load():
+        health_store.load()
+
+    pending_store = PendingCommandStore()
+    if not pending_store.git_load():
+        pending_store.load()
 
     # Start the persistent APRS-IS consumer for receiving packets
     start_persistent_consumer()
@@ -101,9 +110,19 @@ async def lifespan(app: FastAPI):
     # Shutdown: Stop scheduler, consumer, and save data
     stop_scheduler()
     stop_persistent_consumer()
-    APRSServices().save()
-    HealthCheckStore().save()
-    PendingCommandStore().save()
+
+    # Save to both pickle (legacy) and git (backup)
+    services.save()
+    services.git_save("Shutdown: save services")
+    services.git_force_push()
+
+    health_store.save()
+    health_store.git_save("Shutdown: save health checks")
+    health_store.git_force_push()
+
+    pending_store.save()
+    pending_store.git_save("Shutdown: save pending commands")
+    pending_store.git_force_push()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -175,7 +194,7 @@ class PendingCommand(BaseModel):
     submitted_by: str | None = None  # Optional submitter info
 
 
-class PendingCommandStore(objectstore.ObjectStoreMixin):
+class PendingCommandStore(objectstore.ObjectStoreMixin, gitstore.GitStoreMixin):
     """Singleton store for pending command submissions."""
 
     _instance = None
@@ -194,18 +213,49 @@ class PendingCommandStore(objectstore.ObjectStoreMixin):
         save_location = CONF.registry.save_location
         return f"{save_location}/pending_commands.p"
 
+    def _git_filename(self) -> str:
+        return "pending_commands.json"
+
+    def _serialize_for_json(self, obj):
+        """Convert pending commands to JSON-serializable format."""
+        if isinstance(obj, PendingCommand):
+            return {
+                "id": obj.id,
+                "callsign": obj.callsign,
+                "command_name": obj.command_name,
+                "command_description": obj.command_description,
+                "submitted_at": obj.submitted_at.isoformat()
+                if obj.submitted_at
+                else None,
+                "submitted_by": obj.submitted_by,
+            }
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        elif hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        elif hasattr(obj, "dict"):
+            return obj.dict()
+        return str(obj)
+
     @wrapt.synchronized(lock)
     def add(self, pending: PendingCommand):
         """Add a pending command submission."""
         self.data[pending.id] = pending
         self._save_unlocked()
+        self._git_save_unlocked(
+            f"Add pending command: {pending.command_name} for {pending.callsign}"
+        )
 
     @wrapt.synchronized(lock)
     def remove(self, id: str):
         """Remove a pending command by ID."""
         if id in self.data:
+            cmd = self.data[id]
             del self.data[id]
             self._save_unlocked()
+            self._git_save_unlocked(
+                f"Remove pending command: {cmd.command_name} for {cmd.callsign}"
+            )
 
     @wrapt.synchronized(lock)
     def get(self, id: str) -> PendingCommand | None:
@@ -223,7 +273,7 @@ class PendingCommandStore(objectstore.ObjectStoreMixin):
         return [p for p in self.data.values() if p.callsign.upper() == callsign.upper()]
 
 
-class APRSServices(objectstore.ObjectStoreMixin):
+class APRSServices(objectstore.ObjectStoreMixin, gitstore.GitStoreMixin):
     _instance = None
     lock = threading.Lock()
     data: dict = {}
@@ -234,6 +284,19 @@ class APRSServices(objectstore.ObjectStoreMixin):
             cls._instance._init_store()
             cls._instance.data = {}
         return cls._instance
+
+    def _git_filename(self) -> str:
+        return "services.json"
+
+    def _serialize_for_json(self, obj):
+        """Convert service objects to JSON-serializable format."""
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        elif hasattr(obj, "dict"):
+            return obj.dict()
+        elif hasattr(obj, "__dict__"):
+            return obj.__dict__
+        return str(obj)
 
     @wrapt.synchronized(lock)
     def __getitem__(self, callsign):
@@ -258,6 +321,8 @@ class APRSServices(objectstore.ObjectStoreMixin):
         self.data[callsign] = data
         # Call _save_unlocked to avoid deadlock (we already hold the lock)
         self._save_unlocked()
+        # Also save to git backup
+        self._git_save_unlocked(f"Add/update service: {callsign}")
 
     @wrapt.synchronized(lock)
     def remove(self, callsign):

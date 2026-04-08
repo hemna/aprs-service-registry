@@ -10,7 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from loguru import logger
 from oslo_config import cfg
 
-from aprs_service_registry import objectstore
+from aprs_service_registry import gitstore, objectstore
 
 
 LOG = logger
@@ -210,7 +210,7 @@ class HealthCheckResult:
     error: str | None  # Error message if failed
 
 
-class HealthCheckStore(objectstore.ObjectStoreMixin):
+class HealthCheckStore(objectstore.ObjectStoreMixin, gitstore.GitStoreMixin):
     """Singleton store for health check results."""
 
     _instance = None
@@ -228,6 +228,25 @@ class HealthCheckStore(objectstore.ObjectStoreMixin):
         """Override to use different filename than services."""
         save_location = CONF.registry.save_location
         return f"{save_location}/healthchecks.p"
+
+    def _git_filename(self) -> str:
+        return "healthchecks.json"
+
+    def _serialize_for_json(self, obj):
+        """Convert health check results to JSON-serializable format."""
+        if isinstance(obj, HealthCheckResult):
+            return {
+                "timestamp": obj.timestamp.isoformat() if obj.timestamp else None,
+                "success": obj.success,
+                "response_time_ms": obj.response_time_ms,
+                "response_text": obj.response_text,
+                "error": obj.error,
+            }
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        elif hasattr(obj, "__dict__"):
+            return obj.__dict__
+        return str(obj)
 
     @wrapt.synchronized(lock)
     def add_result(self, callsign: str, result: HealthCheckResult):
@@ -313,6 +332,10 @@ def _initialize_aprsd() -> bool:
                 "health_check_timeout": CONF.registry.health_check_timeout,
                 "admin_username": CONF.registry.admin_username,
                 "admin_password": CONF.registry.admin_password,
+                "git_backup_enabled": CONF.registry.git_backup_enabled,
+                "git_backup_path": CONF.registry.git_backup_path,
+                "git_backup_remote": CONF.registry.git_backup_remote,
+                "git_backup_push_interval": CONF.registry.git_backup_push_interval,
             }
             LOG.debug(f"Preserved registry config: {preserved_registry_config}")
 
@@ -376,6 +399,26 @@ def _initialize_aprsd() -> bool:
             cfg.CONF.set_override(
                 "admin_password",
                 preserved_registry_config["admin_password"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "git_backup_enabled",
+                preserved_registry_config["git_backup_enabled"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "git_backup_path",
+                preserved_registry_config["git_backup_path"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "git_backup_remote",
+                preserved_registry_config["git_backup_remote"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "git_backup_push_interval",
+                preserved_registry_config["git_backup_push_interval"],
                 group="registry",
             )
             LOG.debug(
