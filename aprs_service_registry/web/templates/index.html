@@ -206,7 +206,7 @@
                 <div class="commands-section">
                   <div class="commands-header">
                     <span class="commands-title">Commands</span>
-                    <button type="button" class="btn-suggest-command" onclick="event.stopPropagation(); toggleSuggestForm(this);">+ Suggest</button>
+                    <button type="button" class="btn-suggest-command" onclick="event.stopPropagation(); openSuggestModal('{{ callsign }}');">+ Suggest</button>
                   </div>
                   
                   {% if service.commands %}
@@ -222,26 +222,7 @@
                   <p class="commands-empty">No commands documented yet.</p>
                   {% endif %}
                   
-                  <!-- Suggestion Form (hidden by default) -->
-                  <div class="suggest-form" style="display: none;">
-                    <div class="suggest-form-group">
-                      <label>Command:</label>
-                      <input type="text" class="suggest-input" name="command_name" placeholder="e.g., help" onclick="event.stopPropagation();">
-                    </div>
-                    <div class="suggest-form-group">
-                      <label>Description:</label>
-                      <input type="text" class="suggest-input" name="command_description" placeholder="What does this command do?" onclick="event.stopPropagation();">
-                    </div>
-                    <div class="suggest-form-group">
-                      <label>Your callsign (optional):</label>
-                      <input type="text" class="suggest-input" name="submitted_by" placeholder="e.g., W1AW" onclick="event.stopPropagation();">
-                    </div>
-                    <div class="suggest-form-actions">
-                      <button type="button" class="btn-cancel" onclick="event.stopPropagation(); toggleSuggestForm(this);">Cancel</button>
-                      <button type="button" class="btn-submit" onclick="event.stopPropagation(); submitCommand(this, '{{ callsign }}');">Submit</button>
-                    </div>
-                    <div class="suggest-form-message" style="display: none;"></div>
-                  </div>
+
                 </div>
               </div>
             </div>
@@ -361,6 +342,36 @@ frequency_seconds = 900</code></pre>
     </section>
   </main>
 
+  <!-- Command Suggestion Modal -->
+  <div id="suggest-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Suggest a Command</h3>
+        <button type="button" class="modal-close" onclick="closeSuggestModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Suggesting for <strong id="modal-callsign"></strong></p>
+        <div class="suggest-form-group">
+          <label for="modal-command-name">Command:</label>
+          <input type="text" id="modal-command-name" class="suggest-input" placeholder="e.g., help" maxlength="20">
+        </div>
+        <div class="suggest-form-group">
+          <label for="modal-command-desc">Description:</label>
+          <input type="text" id="modal-command-desc" class="suggest-input" placeholder="What does this command do?" maxlength="200">
+        </div>
+        <div class="suggest-form-group">
+          <label for="modal-submitted-by">Your callsign (optional):</label>
+          <input type="text" id="modal-submitted-by" class="suggest-input" placeholder="e.g., W1AW" maxlength="15">
+        </div>
+        <div id="modal-message" class="suggest-form-message" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="closeSuggestModal()">Cancel</button>
+        <button type="button" id="modal-submit-btn" class="btn-submit" onclick="submitModalCommand()">Submit</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="site-footer">
     <div class="container">
       <p>APRS Service Registry &middot; <a href="/docs" target="_blank" rel="noopener">API</a> &middot; <a href="https://how.aprs.works" target="_blank" rel="noopener">how.aprs.works</a></p>
@@ -406,6 +417,11 @@ frequency_seconds = 900</code></pre>
   };
 
   window.handleCardKeydown = function(event, card) {
+    // Don't intercept keyboard events from form elements
+    var tag = event.target.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') {
+      return;
+    }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       toggleCard(card);
@@ -617,55 +633,69 @@ frequency_seconds = 900</code></pre>
 
   // Initial state is already correct (sorted A-Z, showing all)
 
-  // ---- Command Suggestion Functions ----
-  window.toggleSuggestForm = function(btn) {
-    var card = btn.closest('.service-card');
-    var form = card.querySelector('.suggest-form');
-    var isVisible = form.style.display !== 'none';
+  // ---- Command Suggestion Modal Functions ----
+  var currentCallsign = null;
+  var modal = document.getElementById('suggest-modal');
+  var modalCallsign = document.getElementById('modal-callsign');
+  var modalCommandName = document.getElementById('modal-command-name');
+  var modalCommandDesc = document.getElementById('modal-command-desc');
+  var modalSubmittedBy = document.getElementById('modal-submitted-by');
+  var modalMessage = document.getElementById('modal-message');
+  var modalSubmitBtn = document.getElementById('modal-submit-btn');
+
+  window.openSuggestModal = function(callsign) {
+    currentCallsign = callsign;
+    modalCallsign.textContent = callsign;
     
-    if (isVisible) {
-      form.style.display = 'none';
-      // Clear inputs
-      form.querySelectorAll('input').forEach(function(input) {
-        input.value = '';
-      });
-      // Hide message
-      var msg = form.querySelector('.suggest-form-message');
-      if (msg) msg.style.display = 'none';
-    } else {
-      form.style.display = 'block';
-    }
+    // Clear previous values
+    modalCommandName.value = '';
+    modalCommandDesc.value = '';
+    modalSubmittedBy.value = '';
+    modalMessage.style.display = 'none';
+    modalSubmitBtn.disabled = false;
+    modalSubmitBtn.textContent = 'Submit';
+    
+    // Show modal
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    
+    // Focus first input
+    setTimeout(function() {
+      modalCommandName.focus();
+    }, 100);
   };
 
-  window.submitCommand = function(btn, callsign) {
-    var card = btn.closest('.service-card');
-    var form = card.querySelector('.suggest-form');
-    var msgEl = form.querySelector('.suggest-form-message');
-    
-    var commandName = form.querySelector('input[name="command_name"]').value.trim();
-    var commandDesc = form.querySelector('input[name="command_description"]').value.trim();
-    var submittedBy = form.querySelector('input[name="submitted_by"]').value.trim();
+  window.closeSuggestModal = function() {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    currentCallsign = null;
+  };
+
+  window.submitModalCommand = function() {
+    var commandName = modalCommandName.value.trim();
+    var commandDesc = modalCommandDesc.value.trim();
+    var submittedBy = modalSubmittedBy.value.trim();
     
     // Validation
     if (!commandName) {
-      msgEl.textContent = 'Please enter a command name.';
-      msgEl.className = 'suggest-form-message error';
-      msgEl.style.display = 'block';
+      modalMessage.textContent = 'Please enter a command name.';
+      modalMessage.className = 'suggest-form-message error';
+      modalMessage.style.display = 'block';
       return;
     }
     if (!commandDesc) {
-      msgEl.textContent = 'Please enter a description.';
-      msgEl.className = 'suggest-form-message error';
-      msgEl.style.display = 'block';
+      modalMessage.textContent = 'Please enter a description.';
+      modalMessage.className = 'suggest-form-message error';
+      modalMessage.style.display = 'block';
       return;
     }
     
     // Disable button while submitting
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
+    modalSubmitBtn.disabled = true;
+    modalSubmitBtn.textContent = 'Submitting...';
     
     // Submit to API
-    fetch('/api/v1/services/' + encodeURIComponent(callsign) + '/commands', {
+    fetch('/api/v1/services/' + encodeURIComponent(currentCallsign) + '/commands', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -681,34 +711,47 @@ frequency_seconds = 900</code></pre>
     })
     .then(function(result) {
       if (result.ok) {
-        msgEl.textContent = 'Thank you! Your suggestion has been submitted for review.';
-        msgEl.className = 'suggest-form-message success';
-        msgEl.style.display = 'block';
+        modalMessage.textContent = 'Thank you! Your suggestion has been submitted for review.';
+        modalMessage.className = 'suggest-form-message success';
+        modalMessage.style.display = 'block';
         // Clear inputs
-        form.querySelectorAll('input').forEach(function(input) {
-          input.value = '';
-        });
-        // Hide form after 2 seconds
+        modalCommandName.value = '';
+        modalCommandDesc.value = '';
+        modalSubmittedBy.value = '';
+        // Close modal after 2 seconds
         setTimeout(function() {
-          form.style.display = 'none';
-          msgEl.style.display = 'none';
+          closeSuggestModal();
         }, 2000);
       } else {
-        msgEl.textContent = result.data.detail || 'Failed to submit. Please try again.';
-        msgEl.className = 'suggest-form-message error';
-        msgEl.style.display = 'block';
+        modalMessage.textContent = result.data.detail || 'Failed to submit. Please try again.';
+        modalMessage.className = 'suggest-form-message error';
+        modalMessage.style.display = 'block';
+        modalSubmitBtn.disabled = false;
+        modalSubmitBtn.textContent = 'Submit';
       }
     })
     .catch(function(err) {
-      msgEl.textContent = 'Network error. Please try again.';
-      msgEl.className = 'suggest-form-message error';
-      msgEl.style.display = 'block';
-    })
-    .finally(function() {
-      btn.disabled = false;
-      btn.textContent = 'Submit';
+      modalMessage.textContent = 'Network error. Please try again.';
+      modalMessage.className = 'suggest-form-message error';
+      modalMessage.style.display = 'block';
+      modalSubmitBtn.disabled = false;
+      modalSubmitBtn.textContent = 'Submit';
     });
   };
+
+  // Close modal on overlay click
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) {
+      closeSuggestModal();
+    }
+  });
+
+  // Close modal on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && modal.style.display === 'flex') {
+      closeSuggestModal();
+    }
+  });
 })();
   </script>
 </body>
