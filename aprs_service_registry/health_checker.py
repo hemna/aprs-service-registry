@@ -311,6 +311,8 @@ def _initialize_aprsd() -> bool:
                 "aprsd_config_path": CONF.registry.aprsd_config_path,
                 "health_check_enabled": CONF.registry.health_check_enabled,
                 "health_check_timeout": CONF.registry.health_check_timeout,
+                "admin_username": CONF.registry.admin_username,
+                "admin_password": CONF.registry.admin_password,
             }
             LOG.debug(f"Preserved registry config: {preserved_registry_config}")
 
@@ -364,6 +366,16 @@ def _initialize_aprsd() -> bool:
             cfg.CONF.set_override(
                 "health_check_timeout",
                 preserved_registry_config["health_check_timeout"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "admin_username",
+                preserved_registry_config["admin_username"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "admin_password",
+                preserved_registry_config["admin_password"],
                 group="registry",
             )
             LOG.debug(
