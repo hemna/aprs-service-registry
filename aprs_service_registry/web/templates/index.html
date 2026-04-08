@@ -201,6 +201,48 @@
                   {% endfor %}
                 </div>
                 {% endif %}
+                
+                <!-- Service Commands -->
+                <div class="commands-section">
+                  <div class="commands-header">
+                    <span class="commands-title">Commands</span>
+                    <button type="button" class="btn-suggest-command" onclick="event.stopPropagation(); toggleSuggestForm(this);">+ Suggest</button>
+                  </div>
+                  
+                  {% if service.commands %}
+                  <div class="commands-list">
+                    {% for cmd in service.commands %}
+                    <div class="command-item">
+                      <code class="command-name">{{ cmd.name }}</code>
+                      <span class="command-desc">{{ cmd.description }}</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <p class="commands-empty">No commands documented yet.</p>
+                  {% endif %}
+                  
+                  <!-- Suggestion Form (hidden by default) -->
+                  <div class="suggest-form" style="display: none;">
+                    <div class="suggest-form-group">
+                      <label>Command:</label>
+                      <input type="text" class="suggest-input" name="command_name" placeholder="e.g., help" onclick="event.stopPropagation();">
+                    </div>
+                    <div class="suggest-form-group">
+                      <label>Description:</label>
+                      <input type="text" class="suggest-input" name="command_description" placeholder="What does this command do?" onclick="event.stopPropagation();">
+                    </div>
+                    <div class="suggest-form-group">
+                      <label>Your callsign (optional):</label>
+                      <input type="text" class="suggest-input" name="submitted_by" placeholder="e.g., W1AW" onclick="event.stopPropagation();">
+                    </div>
+                    <div class="suggest-form-actions">
+                      <button type="button" class="btn-cancel" onclick="event.stopPropagation(); toggleSuggestForm(this);">Cancel</button>
+                      <button type="button" class="btn-submit" onclick="event.stopPropagation(); submitCommand(this, '{{ callsign }}');">Submit</button>
+                    </div>
+                    <div class="suggest-form-message" style="display: none;"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -574,6 +616,99 @@ frequency_seconds = 900</code></pre>
   });
 
   // Initial state is already correct (sorted A-Z, showing all)
+
+  // ---- Command Suggestion Functions ----
+  window.toggleSuggestForm = function(btn) {
+    var card = btn.closest('.service-card');
+    var form = card.querySelector('.suggest-form');
+    var isVisible = form.style.display !== 'none';
+    
+    if (isVisible) {
+      form.style.display = 'none';
+      // Clear inputs
+      form.querySelectorAll('input').forEach(function(input) {
+        input.value = '';
+      });
+      // Hide message
+      var msg = form.querySelector('.suggest-form-message');
+      if (msg) msg.style.display = 'none';
+    } else {
+      form.style.display = 'block';
+    }
+  };
+
+  window.submitCommand = function(btn, callsign) {
+    var card = btn.closest('.service-card');
+    var form = card.querySelector('.suggest-form');
+    var msgEl = form.querySelector('.suggest-form-message');
+    
+    var commandName = form.querySelector('input[name="command_name"]').value.trim();
+    var commandDesc = form.querySelector('input[name="command_description"]').value.trim();
+    var submittedBy = form.querySelector('input[name="submitted_by"]').value.trim();
+    
+    // Validation
+    if (!commandName) {
+      msgEl.textContent = 'Please enter a command name.';
+      msgEl.className = 'suggest-form-message error';
+      msgEl.style.display = 'block';
+      return;
+    }
+    if (!commandDesc) {
+      msgEl.textContent = 'Please enter a description.';
+      msgEl.className = 'suggest-form-message error';
+      msgEl.style.display = 'block';
+      return;
+    }
+    
+    // Disable button while submitting
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    
+    // Submit to API
+    fetch('/api/v1/services/' + encodeURIComponent(callsign) + '/commands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command_name: commandName,
+        command_description: commandDesc,
+        submitted_by: submittedBy || null
+      })
+    })
+    .then(function(response) {
+      return response.json().then(function(data) {
+        return { ok: response.ok, data: data };
+      });
+    })
+    .then(function(result) {
+      if (result.ok) {
+        msgEl.textContent = 'Thank you! Your suggestion has been submitted for review.';
+        msgEl.className = 'suggest-form-message success';
+        msgEl.style.display = 'block';
+        // Clear inputs
+        form.querySelectorAll('input').forEach(function(input) {
+          input.value = '';
+        });
+        // Hide form after 2 seconds
+        setTimeout(function() {
+          form.style.display = 'none';
+          msgEl.style.display = 'none';
+        }, 2000);
+      } else {
+        msgEl.textContent = result.data.detail || 'Failed to submit. Please try again.';
+        msgEl.className = 'suggest-form-message error';
+        msgEl.style.display = 'block';
+      }
+    })
+    .catch(function(err) {
+      msgEl.textContent = 'Network error. Please try again.';
+      msgEl.className = 'suggest-form-message error';
+      msgEl.style.display = 'block';
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+    });
+  };
 })();
   </script>
 </body>

@@ -1,5 +1,6 @@
 import json
 import threading
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
     # Startup: Load services and health check results from disk
     APRSServices().load()
     HealthCheckStore().load()
+    PendingCommandStore().load()
 
     # Start the persistent APRS-IS consumer for receiving packets
     start_persistent_consumer()
@@ -99,6 +101,7 @@ async def lifespan(app: FastAPI):
     stop_persistent_consumer()
     APRSServices().save()
     HealthCheckStore().save()
+    PendingCommandStore().save()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -106,6 +109,13 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
+
+
+class ServiceCommand(BaseModel):
+    """A command that a service accepts."""
+
+    name: str
+    description: str
 
 
 class registryRequest(BaseModel):
@@ -118,6 +128,66 @@ class registryRequest(BaseModel):
     callsign_owner: str | None = None
     status: Literal["active", "pending", "down", "deleted"] = "active"
     health_check_command: str | None = None
+    commands: list[ServiceCommand] = []
+
+
+class PendingCommand(BaseModel):
+    """A command submission awaiting moderation."""
+
+    id: str
+    callsign: str
+    command_name: str
+    command_description: str
+    submitted_at: datetime
+    submitted_by: str | None = None  # Optional submitter info
+
+
+class PendingCommandStore(objectstore.ObjectStoreMixin):
+    """Singleton store for pending command submissions."""
+
+    _instance = None
+    lock = threading.Lock()
+    data: dict = {}  # {id: PendingCommand}
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init_store()
+            cls._instance.data = {}
+        return cls._instance
+
+    def _save_filename(self):
+        """Override to use different filename."""
+        save_location = CONF.registry.save_location
+        return f"{save_location}/pending_commands.p"
+
+    @wrapt.synchronized(lock)
+    def add(self, pending: PendingCommand):
+        """Add a pending command submission."""
+        self.data[pending.id] = pending
+        self._save_unlocked()
+
+    @wrapt.synchronized(lock)
+    def remove(self, id: str):
+        """Remove a pending command by ID."""
+        if id in self.data:
+            del self.data[id]
+            self._save_unlocked()
+
+    @wrapt.synchronized(lock)
+    def get(self, id: str) -> PendingCommand | None:
+        """Get a pending command by ID."""
+        return self.data.get(id)
+
+    @wrapt.synchronized(lock)
+    def get_all(self) -> dict:
+        """Get all pending commands."""
+        return dict(self.data)
+
+    @wrapt.synchronized(lock)
+    def get_by_callsign(self, callsign: str) -> list[PendingCommand]:
+        """Get all pending commands for a specific service."""
+        return [p for p in self.data.values() if p.callsign.upper() == callsign.upper()]
 
 
 class APRSServices(objectstore.ObjectStoreMixin):
@@ -467,6 +537,229 @@ async def trigger_all_health_checks(request: Request):
         "status": "ok",
         "message": f"Health checks started for {len(checkable)} services in background",
         "services": checkable,
+    }
+
+
+# ---- Command Submission API ----
+
+
+class CommandSubmission(BaseModel):
+    """Request to submit a command suggestion."""
+
+    command_name: str
+    command_description: str
+    submitted_by: str | None = None
+
+
+@app.post("/api/v1/services/{callsign}/commands", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def submit_command(request: Request, callsign: str, data: CommandSubmission):
+    """Submit a command suggestion for a service (goes to moderation queue)."""
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    # Verify service exists
+    try:
+        _service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
+
+    # Create pending command
+    pending = PendingCommand(
+        id=str(uuid.uuid4()),
+        callsign=callsign_upper,
+        command_name=data.command_name.strip(),
+        command_description=data.command_description.strip(),
+        submitted_at=datetime.now(timezone.utc),
+        submitted_by=data.submitted_by.strip() if data.submitted_by else None,
+    )
+
+    # Add to pending store
+    store = PendingCommandStore()
+    store.add(pending)
+
+    LOG.info(
+        f"Command suggestion submitted for {callsign_upper}: '{pending.command_name}'"
+    )
+
+    return {
+        "status": "ok",
+        "message": "Command suggestion submitted for review",
+        "id": pending.id,
+    }
+
+
+@app.get("/api/v1/services/{callsign}/commands", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def get_service_commands(request: Request, callsign: str):
+    """Get approved commands for a service."""
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+        service_dict = service_to_dict(service)
+        commands = service_dict.get("commands", [])
+        return {"callsign": callsign_upper, "commands": commands}
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
+
+
+# ---- Admin API for Command Moderation ----
+
+
+@app.get("/api/v1/admin/pending-commands", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def get_pending_commands(request: Request):
+    """Get all pending command submissions (admin only)."""
+    store = PendingCommandStore()
+    pending = store.get_all()
+
+    # Convert to list of dicts for JSON response
+    result = []
+    for id, cmd in pending.items():
+        result.append(
+            {
+                "id": cmd.id,
+                "callsign": cmd.callsign,
+                "command_name": cmd.command_name,
+                "command_description": cmd.command_description,
+                "submitted_at": cmd.submitted_at.isoformat(),
+                "submitted_by": cmd.submitted_by,
+            }
+        )
+
+    # Sort by submission time (oldest first)
+    result.sort(key=lambda x: x["submitted_at"])
+
+    return {"pending_commands": result, "count": len(result)}
+
+
+@app.post("/api/v1/admin/pending-commands/{id}/approve", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def approve_command(request: Request, id: str):
+    """Approve a pending command submission (admin only)."""
+    pending_store = PendingCommandStore()
+    services = APRSServices()
+
+    # Get the pending command
+    pending = pending_store.get(id)
+    if not pending:
+        raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
+
+    # Get the service
+    try:
+        service = services[pending.callsign]
+    except KeyError:
+        # Service was deleted, remove the pending command
+        pending_store.remove(id)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{pending.callsign}' no longer exists",
+        )
+
+    # Add command to service
+    service_dict = service_to_dict(service)
+    commands = service_dict.get("commands", [])
+
+    # Check for duplicate command name
+    existing_names = [c["name"].lower() for c in commands]
+    if pending.command_name.lower() in existing_names:
+        pending_store.remove(id)
+        return {
+            "status": "ok",
+            "message": f"Command '{pending.command_name}' already exists, removed from queue",
+        }
+
+    # Add the new command
+    commands.append(
+        {
+            "name": pending.command_name,
+            "description": pending.command_description,
+        }
+    )
+    service_dict["commands"] = commands
+
+    # Save updated service
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(pending.callsign, updated_service)
+
+    # Remove from pending
+    pending_store.remove(id)
+
+    LOG.info(f"Approved command '{pending.command_name}' for {pending.callsign}")
+
+    return {
+        "status": "ok",
+        "message": f"Command '{pending.command_name}' approved for {pending.callsign}",
+    }
+
+
+@app.delete("/api/v1/admin/pending-commands/{id}", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def reject_command(request: Request, id: str):
+    """Reject (delete) a pending command submission (admin only)."""
+    pending_store = PendingCommandStore()
+
+    pending = pending_store.get(id)
+    if not pending:
+        raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
+
+    pending_store.remove(id)
+
+    LOG.info(f"Rejected command '{pending.command_name}' for {pending.callsign}")
+
+    return {
+        "status": "ok",
+        "message": f"Command suggestion rejected",
+    }
+
+
+@app.delete(
+    "/api/v1/services/{callsign}/commands/{command_name}", response_class=JSONResponse
+)
+@limiter.limit("60/minute")
+async def delete_command(request: Request, callsign: str, command_name: str):
+    """Delete an approved command from a service (admin only)."""
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
+
+    service_dict = service_to_dict(service)
+    commands = service_dict.get("commands", [])
+
+    # Find and remove the command
+    original_len = len(commands)
+    commands = [c for c in commands if c["name"].lower() != command_name.lower()]
+
+    if len(commands) == original_len:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Command '{command_name}' not found for service '{callsign_upper}'",
+        )
+
+    service_dict["commands"] = commands
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign_upper, updated_service)
+
+    LOG.info(f"Deleted command '{command_name}' from {callsign_upper}")
+
+    return {
+        "status": "ok",
+        "message": f"Command '{command_name}' deleted from {callsign_upper}",
     }
 
 
