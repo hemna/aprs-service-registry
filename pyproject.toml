@@ -58,4 +58,4 @@ aprs-service-registry = "aprs_service_registry.cli:main"
 include = ["aprs_service_registry*"]
 
 [tool.setuptools.package-data]
-aprs_service_registry = ["web/static/*", "web/templates/*"]
+aprs_service_registry = ["web/static/*", "web/templates/*", "web/templates/**/*"]
