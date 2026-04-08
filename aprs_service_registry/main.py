@@ -1229,21 +1229,26 @@ async def admin_delete_service(
     callsign: str,
     credentials: Annotated[HTTPBasicCredentials, Depends(security)],
 ):
-    """Delete a service (admin web interface)."""
+    """Soft delete a service - mark status as 'deleted' (admin web interface)."""
     verify_admin(credentials)
 
     services = APRSServices()
     callsign_upper = callsign.upper()
 
     try:
-        del services[callsign_upper]
-        services.save()
+        service = services[callsign_upper]
     except KeyError:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
 
-    LOG.info(f"Admin deleted service {callsign_upper}")
+    # Convert to dict, update status, convert back
+    service_dict = service_to_dict(service)
+    service_dict["status"] = "deleted"
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign_upper, updated_service)
+
+    LOG.info(f"Admin soft-deleted service {callsign_upper}")
 
     return RedirectResponse(url="/admin/services", status_code=303)
 
