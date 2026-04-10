@@ -28,6 +28,9 @@
         <a href="/admin/services/{{ service.callsign }}" style="font-family: var(--font-mono); font-weight: 600; color: var(--accent); text-decoration: none;">
           {{ service.callsign }}
         </a>
+        {% if service.featured %}
+          <span style="color: #ffd700; margin-left: 0.25rem;" title="Featured">&starf;</span>
+        {% endif %}
       </td>
       <td>
         {% if service.status == 'active' %}

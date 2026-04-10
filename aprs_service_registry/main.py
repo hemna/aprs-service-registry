@@ -181,6 +181,7 @@ class registryRequest(BaseModel):
     status: Literal["active", "pending", "down", "deleted"] = "active"
     health_check_command: str | None = None
     commands: list[ServiceCommand] = []
+    featured: bool = False
 
 
 class PendingCommand(BaseModel):
@@ -494,6 +495,9 @@ async def registry(request: Request, data: registryRequest):
 
         # ALWAYS preserve commands - they are admin-managed and services don't know about them
         request_dict["commands"] = existing_dict.get("commands", [])
+
+        # ALWAYS preserve featured flag - it's admin-managed
+        request_dict["featured"] = existing_dict.get("featured", False)
 
     request_upper = registryRequest(**request_dict)
     services.add_and_persist(callsign_upper, request_upper)
@@ -1313,6 +1317,8 @@ async def admin_edit_service(
     # Preserve commands - they are not editable via this form
     # (commands are managed via the command moderation system)
     service_dict["commands"] = service_dict.get("commands", [])
+    # Featured flag - checkbox sends "true" when checked, absent when unchecked
+    service_dict["featured"] = form.get("featured") == "true"
 
     updated_service = registryRequest(**service_dict)
     services.add_and_persist(callsign_upper, updated_service)

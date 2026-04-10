@@ -22,6 +22,9 @@
     {% else %}
       <span class="health-badge">{{ service.status }}</span>
     {% endif %}
+    {% if service.featured %}
+      <span class="health-badge" style="background: rgba(255, 215, 0, 0.15); color: #ffd700;">&starf; Featured</span>
+    {% endif %}
     {% if uptime and uptime != '--' %}
       &nbsp;&middot;&nbsp; {{ uptime }} uptime
     {% endif %}
@@ -70,6 +73,18 @@
           <label for="health_check_command">Health Check Command</label>
           <input type="text" id="health_check_command" name="health_check_command" class="admin-input" 
                  value="{{ service.health_check_command or '' }}" placeholder="e.g., ping">
+        </div>
+        
+        <div class="admin-form-group">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="featured" name="featured" value="true"
+                   {% if service.featured %}checked{% endif %}
+                   style="width: auto; margin: 0;">
+            Featured Service
+          </label>
+          <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+            Featured services are highlighted in the registry listing
+          </small>
         </div>
         
         <div class="admin-actions">
