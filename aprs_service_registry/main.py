@@ -1025,6 +1025,42 @@ async def admin_add_command(
     }
 
 
+@app.post("/api/v1/admin/beacon", response_class=JSONResponse)
+@limiter.limit("10/minute")
+async def admin_send_beacon(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Send an APRS position beacon (admin only)."""
+    verify_admin(credentials)
+
+    from aprs_service_registry.health_checker import send_beacon
+
+    success = send_beacon()
+    if success:
+        return {"status": "ok", "message": "Beacon sent successfully"}
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send beacon - check logs for details",
+        )
+
+
+@app.post("/api/v1/admin/bulletins", response_class=JSONResponse)
+@limiter.limit("10/minute")
+async def admin_send_bulletins(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Send APRS bulletin announcements (admin only)."""
+    verify_admin(credentials)
+
+    from aprs_service_registry.health_checker import send_bulletins
+
+    send_bulletins()
+    return {"status": "ok", "message": "Bulletins sent"}
+
+
 async def ws_process_balls(msg):
     time.sleep(2)
     return {"call": "balls", "data": msg["message"]}

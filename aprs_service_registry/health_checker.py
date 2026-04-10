@@ -798,6 +798,55 @@ def send_bulletins() -> None:
         LOG.error(f"Failed to send bulletins: {e}")
 
 
+def send_beacon() -> bool:
+    """Send an APRS position beacon for the registry station.
+
+    Returns:
+        True if beacon was sent successfully, False otherwise.
+    """
+    if not _aprsd_initialized:
+        if not _initialize_aprsd():
+            LOG.error("Cannot send beacon: APRSD not initialized")
+            return False
+
+    if not start_persistent_consumer():
+        LOG.error("Cannot send beacon: persistent consumer not running")
+        return False
+
+    try:
+        from aprsd.packets import BeaconPacket
+        from aprsd.threads import tx
+
+        from_call = cfg.CONF.callsign
+        if not from_call:
+            LOG.error("No callsign configured for beacon send")
+            return False
+
+        # Get location from APRSD config
+        lat = cfg.CONF.latitude
+        lon = cfg.CONF.longitude
+
+        if lat == 0.0 and lon == 0.0:
+            LOG.error("No latitude/longitude configured for beacon")
+            return False
+
+        beacon = BeaconPacket(
+            from_call=from_call,
+            latitude=lat,
+            longitude=lon,
+            symbol="r",  # Repeater symbol
+            symbol_table="/",
+            comment="APRS Service Registry - aprs.hemna.com",
+        )
+        tx.send(beacon, direct=True)
+        LOG.info(f"Sent position beacon: {beacon.raw}")
+        return True
+
+    except Exception as e:
+        LOG.error(f"Failed to send beacon: {e}")
+        return False
+
+
 # Global scheduler instance
 _scheduler: AsyncIOScheduler | None = None
 
