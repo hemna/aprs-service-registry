@@ -98,6 +98,25 @@ registry_opts = [
         default=60,
         help="Minutes between pushes to remote. 0 = push on every commit.",
     ),
+    cfg.BoolOpt(
+        "bulletin_enabled",
+        default=False,
+        help="Enable periodic APRS bulletin announcements.",
+    ),
+    cfg.IntOpt(
+        "bulletin_interval",
+        default=3600,
+        help="Seconds between bulletin re-sends (default: 3600 = 1 hour).",
+    ),
+    cfg.ListOpt(
+        "bulletin_messages",
+        default=[
+            "APRS Service Registry - aprs.hemna.com - by WB4BOR",
+            "Find APRS services & commands. API: aprs.hemna.com/docs",
+            "http://aprs.hemna.com",
+        ],
+        help="Bulletin message lines (max 67 chars each). Each becomes BLN1, BLN2, etc.",
+    ),
 ]
 
 

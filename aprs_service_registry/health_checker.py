@@ -336,6 +336,9 @@ def _initialize_aprsd() -> bool:
                 "git_backup_path": CONF.registry.git_backup_path,
                 "git_backup_remote": CONF.registry.git_backup_remote,
                 "git_backup_push_interval": CONF.registry.git_backup_push_interval,
+                "bulletin_enabled": CONF.registry.bulletin_enabled,
+                "bulletin_interval": CONF.registry.bulletin_interval,
+                "bulletin_messages": CONF.registry.bulletin_messages,
             }
             LOG.debug(f"Preserved registry config: {preserved_registry_config}")
 
@@ -419,6 +422,21 @@ def _initialize_aprsd() -> bool:
             cfg.CONF.set_override(
                 "git_backup_push_interval",
                 preserved_registry_config["git_backup_push_interval"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "bulletin_enabled",
+                preserved_registry_config["bulletin_enabled"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "bulletin_interval",
+                preserved_registry_config["bulletin_interval"],
+                group="registry",
+            )
+            cfg.CONF.set_override(
+                "bulletin_messages",
+                preserved_registry_config["bulletin_messages"],
                 group="registry",
             )
             LOG.debug(
@@ -718,52 +736,113 @@ def get_checkable_services() -> list[str]:
     return checkable
 
 
+def send_bulletins() -> None:
+    """Send APRS bulletin packets to announce the service registry."""
+    if not CONF.registry.bulletin_enabled:
+        return
+
+    if not _aprsd_initialized:
+        if not _initialize_aprsd():
+            LOG.error("Cannot send bulletins: APRSD not initialized")
+            return
+
+    if not start_persistent_consumer():
+        LOG.error("Cannot send bulletins: persistent consumer not running")
+        return
+
+    try:
+        from aprsd.packets import BulletinPacket
+        from aprsd.threads import tx
+
+        from_call = cfg.CONF.callsign
+        if not from_call:
+            LOG.error("No callsign configured for bulletin send")
+            return
+
+        messages = CONF.registry.bulletin_messages
+        for i, message_text in enumerate(messages):
+            bid = str(i + 1)
+            # APRS bulletin messages are max 67 chars
+            if len(message_text) > 67:
+                LOG.warning(
+                    f"Bulletin BLN{bid} text exceeds 67 chars, truncating: {message_text}"
+                )
+                message_text = message_text[:67]
+
+            packet = BulletinPacket(
+                from_call=from_call,
+                to_call=f"BLN{bid}",
+                bid=bid,
+                message_text=message_text,
+            )
+            tx.send(packet, direct=True)
+            LOG.info(f"Sent bulletin BLN{bid}: {message_text}")
+
+    except Exception as e:
+        LOG.error(f"Failed to send bulletins: {e}")
+
+
 # Global scheduler instance
 _scheduler: AsyncIOScheduler | None = None
 
 
 def setup_scheduler() -> AsyncIOScheduler | None:
-    """Set up the health check scheduler.
+    """Set up the health check and bulletin scheduler.
 
     Returns:
-        The scheduler instance, or None if health checks are disabled.
+        The scheduler instance, or None if nothing to schedule.
     """
     global _scheduler
 
-    if not CONF.registry.health_check_enabled:
-        LOG.info("Health checks disabled in config")
-        return None
+    has_health_checks = CONF.registry.health_check_enabled
+    has_bulletins = CONF.registry.bulletin_enabled
 
-    checkable = get_checkable_services()
-    if not checkable:
-        LOG.info("No checkable services found, skipping scheduler setup")
+    if not has_health_checks and not has_bulletins:
+        LOG.info("Health checks and bulletins both disabled")
         return None
-
-    interval = calculate_stagger_interval(len(checkable))
-    LOG.info(
-        f"Setting up health check scheduler: {len(checkable)} services, "
-        f"{interval}s interval",
-    )
 
     _scheduler = AsyncIOScheduler()
 
-    # Schedule each service with a staggered start time
-    for i, callsign in enumerate(checkable):
-        # Initial delay to stagger the first run
-        initial_delay = i * interval
+    # Schedule health checks if enabled
+    if has_health_checks:
+        checkable = get_checkable_services()
+        if checkable:
+            interval = calculate_stagger_interval(len(checkable))
+            LOG.info(
+                f"Setting up health check scheduler: {len(checkable)} services, "
+                f"{interval}s interval",
+            )
+            for i, callsign in enumerate(checkable):
+                initial_delay = i * interval
+                _scheduler.add_job(
+                    check_service,
+                    "interval",
+                    seconds=SECONDS_PER_HOUR,
+                    args=[callsign],
+                    id=f"health_check_{callsign}",
+                    name=f"Health check for {callsign}",
+                    next_run_time=datetime.now(timezone.utc)
+                    + timedelta(seconds=initial_delay),
+                )
+                LOG.debug(
+                    f"Scheduled health check for {callsign} "
+                    f"(initial delay: {initial_delay}s)",
+                )
+        else:
+            LOG.info("No checkable services found for health checks")
 
+    # Schedule bulletin announcements if enabled
+    if has_bulletins:
+        bulletin_interval = CONF.registry.bulletin_interval
         _scheduler.add_job(
-            check_service,
+            send_bulletins,
             "interval",
-            seconds=SECONDS_PER_HOUR,  # Run hourly
-            args=[callsign],
-            id=f"health_check_{callsign}",
-            name=f"Health check for {callsign}",
-            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=initial_delay),
+            seconds=bulletin_interval,
+            id="bulletin_sender",
+            name="APRS bulletin announcements",
+            next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
         )
-        LOG.debug(
-            f"Scheduled health check for {callsign} (initial delay: {initial_delay}s)",
-        )
+        LOG.info(f"Scheduled bulletin announcements every {bulletin_interval}s")
 
     return _scheduler
 
