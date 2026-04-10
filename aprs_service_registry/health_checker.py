@@ -800,7 +800,7 @@ def send_bulletins() -> None:
             from aprsd.client.client import APRSDClient
 
             client = APRSDClient()
-            client.send(packet.raw)
+            client.send(packet)
             LOG.info(f"Sent bulletin BLN{bid}: {message_text}")
 
     except Exception as e:
