@@ -201,6 +201,12 @@ main {
   font-size: 0.75rem;
 }
 
+.legend-count {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 .badge-count {
   display: inline-flex;
   align-items: center;

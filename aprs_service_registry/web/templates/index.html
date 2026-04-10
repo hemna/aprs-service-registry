@@ -57,9 +57,9 @@
         <p class="section-desc">A list of known APRS services so operators can find them quickly. Click a card to see details.</p>
 
         <div class="status-legend">
-          <span class="legend-item"><span class="badge bg-success">Active</span> Service is responding to health checks</span>
-          <span class="legend-item"><span class="badge bg-warning text-dark">Pending</span> Service recently failed health checks (may be temporarily unavailable)</span>
-          <span class="legend-item"><span class="badge bg-danger">Down</span> Service has failed 3 consecutive health checks</span>
+          <span class="legend-item"><span class="badge bg-success">Active</span> Service is responding to health checks <span class="legend-count" id="count-active"></span></span>
+          <span class="legend-item"><span class="badge bg-warning text-dark">Pending</span> Service recently failed health checks <span class="legend-count" id="count-pending"></span></span>
+          <span class="legend-item"><span class="badge bg-danger">Down</span> Service has failed 3+ consecutive health checks <span class="legend-count" id="count-down"></span></span>
         </div>
 
         {% if services|length > 0 %}
@@ -77,8 +77,8 @@
           <div class="controls-group">
             <span class="controls-label">Filter:</span>
             <div class="filter-buttons">
-              <button type="button" class="filter-btn active" data-filter="all">All</button>
-              <button type="button" class="filter-btn" data-filter="active">Active</button>
+              <button type="button" class="filter-btn" data-filter="all">All</button>
+              <button type="button" class="filter-btn active" data-filter="active">Active</button>
               <button type="button" class="filter-btn" data-filter="pending">Pending</button>
               <button type="button" class="filter-btn" data-filter="down">Down</button>
             </div>
@@ -553,13 +553,30 @@ frequency_seconds = 900</code></pre>
   var filterButtons = document.querySelectorAll('.filter-btn');
   var grid = document.getElementById('services-grid');
   var visibleCountEl = document.getElementById('visible-count');
-  var currentFilter = 'all';
+  var currentFilter = 'active';  // Default to Active filter
 
   // Status priority for sorting (lower = higher priority for "active first")
   var statusPriority = { 'active': 1, 'pending': 2, 'down': 3 };
 
   function getServiceCols() {
     return Array.from(grid.querySelectorAll('.service-col'));
+  }
+
+  function updateStatusCounts() {
+    var cols = getServiceCols();
+    var counts = { active: 0, pending: 0, down: 0 };
+    cols.forEach(function(col) {
+      var status = col.getAttribute('data-status') || 'active';
+      if (counts.hasOwnProperty(status)) {
+        counts[status]++;
+      }
+    });
+    var countActive = document.getElementById('count-active');
+    var countPending = document.getElementById('count-pending');
+    var countDown = document.getElementById('count-down');
+    if (countActive) countActive.textContent = '(' + counts.active + ')';
+    if (countPending) countPending.textContent = '(' + counts.pending + ')';
+    if (countDown) countDown.textContent = '(' + counts.down + ')';
   }
 
   function updateVisibleCount() {
@@ -639,7 +656,52 @@ frequency_seconds = 900</code></pre>
     });
   });
 
-  // Initial state is already correct (sorted A-Z, showing all)
+  // Initialize: apply default filter (Active) and update counts
+  updateStatusCounts();
+  applyFilter();
+
+  // ---- Auto-refresh status counts every 60 seconds ----
+  function refreshStatusData() {
+    fetch('/api/v1/registry?include_all=true')
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (!data.services) return;
+        
+        // Update data-status attributes on existing cards
+        var cols = getServiceCols();
+        var serviceMap = {};
+        data.services.forEach(function(svc) {
+          serviceMap[svc.callsign.toUpperCase()] = svc.status || 'active';
+        });
+        
+        cols.forEach(function(col) {
+          var callsign = col.getAttribute('data-callsign');
+          if (callsign && serviceMap[callsign.toUpperCase()]) {
+            var newStatus = serviceMap[callsign.toUpperCase()];
+            var oldStatus = col.getAttribute('data-status');
+            if (newStatus !== oldStatus) {
+              col.setAttribute('data-status', newStatus);
+              // Update the badge in the card
+              var badge = col.querySelector('.status-badge');
+              if (badge) {
+                badge.className = 'status-badge status-' + newStatus;
+                badge.textContent = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+              }
+            }
+          }
+        });
+        
+        // Update counts and re-apply filter
+        updateStatusCounts();
+        applyFilter();
+      })
+      .catch(function(err) {
+        console.error('Failed to refresh status data:', err);
+      });
+  }
+
+  // Refresh every 60 seconds
+  setInterval(refreshStatusData, 60000);
 
   // ---- Command Suggestion Modal Functions ----
   var currentCallsign = null;
