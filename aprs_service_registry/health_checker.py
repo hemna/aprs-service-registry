@@ -785,6 +785,12 @@ def send_bulletins() -> None:
                 bid=bid,
                 message_text=message_text,
             )
+            # Fix APRSD bug: BulletinPacket._build_payload() incorrectly pads
+            # the bid to 9 chars instead of padding the whole addressee (BLN+bid)
+            # to 9 chars. Correct format: :BLN1     :message (9-char addressee)
+            # APRSD generates: :BLN1        :message (12-char addressee)
+            addressee = f"BLN{bid}"
+            packet.payload = f":{addressee:<9}:{message_text}"
             tx.send(packet, direct=True)
             LOG.info(f"Sent bulletin BLN{bid}: {message_text}")
 
