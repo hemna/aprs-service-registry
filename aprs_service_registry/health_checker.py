@@ -789,9 +789,18 @@ def send_bulletins() -> None:
             # the bid to 9 chars instead of padding the whole addressee (BLN+bid)
             # to 9 chars. Correct format: :BLN1     :message (9-char addressee)
             # APRSD generates: :BLN1        :message (12-char addressee)
+            #
+            # We must set raw directly because tx.send() calls prepare() which
+            # rebuilds payload and raw, overwriting any manual payload fix.
             addressee = f"BLN{bid}"
             packet.payload = f":{addressee:<9}:{message_text}"
-            tx.send(packet, direct=True)
+            packet.raw = f"{from_call}>APZ100:{packet.payload}"
+
+            # Send via client directly to bypass tx.send()'s prepare() call
+            from aprsd.client.client import APRSDClient
+
+            client = APRSDClient()
+            client.send(packet.raw)
             LOG.info(f"Sent bulletin BLN{bid}: {message_text}")
 
     except Exception as e:
