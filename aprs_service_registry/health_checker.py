@@ -754,13 +754,16 @@ def send_bulletins() -> None:
         from aprsd.packets import BulletinPacket
         from aprsd.threads import tx
 
+        from aprs_service_registry.main import APRSServices
+
         from_call = cfg.CONF.callsign
         if not from_call:
             LOG.error("No callsign configured for bulletin send")
             return
 
         # Get service count for {count} placeholder
-        service_count = len(_health_store.services) if _health_store else 0
+        services = APRSServices()
+        service_count = len(services)
 
         messages = CONF.registry.bulletin_messages
         for i, message_template in enumerate(messages):
