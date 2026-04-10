@@ -94,7 +94,7 @@
             <div class="service-card p-3" tabindex="0" onclick="toggleCard(this)" onkeydown="handleCardKeydown(event, this)">
               <!-- Card header with callsign and status badge -->
               <div class="card-header-section">
-                <span class="callsign">{{ callsign }}</span>
+                <span class="callsign">{{ callsign }}{% if service.featured %}<span class="featured-star" title="Featured Service">&starf;</span>{% endif %}</span>
                 {% if service.status == 'down' %}
                   <span class="status-badge status-down">Down</span>
                 {% elif service.status == 'pending' %}

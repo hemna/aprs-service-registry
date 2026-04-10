@@ -275,6 +275,13 @@ main {
   color: var(--text);
 }
 
+.featured-star {
+  color: #ffd700;
+  margin-left: 0.35rem;
+  font-size: 1.1em;
+  text-shadow: 0 0 2px rgba(255, 215, 0, 0.5);
+}
+
 .link-external {
   color: var(--accent);
   text-decoration: none;
