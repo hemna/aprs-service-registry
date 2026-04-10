@@ -823,8 +823,8 @@ def send_beacon() -> bool:
             return False
 
         # Get location from APRSD config
-        lat = cfg.CONF.latitude
-        lon = cfg.CONF.longitude
+        lat = float(cfg.CONF.latitude)
+        lon = float(cfg.CONF.longitude)
 
         if lat == 0.0 and lon == 0.0:
             LOG.error("No latitude/longitude configured for beacon")
