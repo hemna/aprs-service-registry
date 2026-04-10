@@ -928,6 +928,99 @@ async def delete_command(request: Request, callsign: str, command_name: str):
     }
 
 
+class AdminCommandInput(BaseModel):
+    """Input for adding a command via admin API."""
+
+    name: str
+    description: str
+
+
+@app.put("/api/v1/admin/services/{callsign}/commands", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def admin_set_commands(
+    request: Request,
+    callsign: str,
+    commands: list[AdminCommandInput],
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Set/replace all commands for a service (admin only)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
+
+    service_dict = service_to_dict(service)
+    service_dict["commands"] = [
+        {"name": c.name, "description": c.description} for c in commands
+    ]
+
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign_upper, updated_service)
+
+    LOG.info(f"Admin set {len(commands)} commands for {callsign_upper}")
+
+    return {
+        "status": "ok",
+        "message": f"Set {len(commands)} commands for {callsign_upper}",
+        "commands": service_dict["commands"],
+    }
+
+
+@app.post("/api/v1/admin/services/{callsign}/commands", response_class=JSONResponse)
+@limiter.limit("60/minute")
+async def admin_add_command(
+    request: Request,
+    callsign: str,
+    command: AdminCommandInput,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Add a single command to a service (admin only)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
+        service = services[callsign_upper]
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Service '{callsign_upper}' not found",
+        )
+
+    service_dict = service_to_dict(service)
+    commands = service_dict.get("commands", [])
+
+    # Check for duplicate
+    existing_names = [c["name"].lower() for c in commands]
+    if command.name.lower() in existing_names:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Command '{command.name}' already exists for {callsign_upper}",
+        )
+
+    commands.append({"name": command.name, "description": command.description})
+    service_dict["commands"] = commands
+
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign_upper, updated_service)
+
+    LOG.info(f"Admin added command '{command.name}' to {callsign_upper}")
+
+    return {
+        "status": "ok",
+        "message": f"Added command '{command.name}' to {callsign_upper}",
+    }
+
+
 async def ws_process_balls(msg):
     time.sleep(2)
     return {"call": "balls", "data": msg["message"]}
