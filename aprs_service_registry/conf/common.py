@@ -113,9 +113,10 @@ registry_opts = [
         default=[
             "APRS Service Registry - aprs.hemna.com - by WB4BOR",
             "Find APRS services & commands. API: aprs.hemna.com/docs",
-            "http://aprs.hemna.com",
+            "aprs.hemna.com - {count} services registered",
         ],
-        help="Bulletin message lines (max 67 chars each). Each becomes BLN1, BLN2, etc.",
+        help="Bulletin message lines (max 67 chars each). Each becomes BLN1, BLN2, etc. "
+        "Supports {count} placeholder for current service count.",
     ),
 ]
 

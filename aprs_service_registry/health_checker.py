@@ -759,9 +759,16 @@ def send_bulletins() -> None:
             LOG.error("No callsign configured for bulletin send")
             return
 
+        # Get service count for {count} placeholder
+        service_count = len(_health_store.services) if _health_store else 0
+
         messages = CONF.registry.bulletin_messages
-        for i, message_text in enumerate(messages):
+        for i, message_template in enumerate(messages):
             bid = str(i + 1)
+
+            # Substitute placeholders
+            message_text = message_template.format(count=service_count)
+
             # APRS bulletin messages are max 67 chars
             if len(message_text) > 67:
                 LOG.warning(
