@@ -17,11 +17,14 @@
       <th>Description</th>
       <th>Submitted By</th>
       <th>Submitted</th>
+      <th>Status</th>
       <th>Actions</th>
     </tr>
   </thead>
   <tbody>
-    {% for cmd in pending_commands %}
+    {% for item in pending_commands %}
+    {% set cmd = item.cmd %}
+    {% set dup = item.dup_status %}
     <tr>
       <td><code style="font-family: var(--font-mono); font-weight: 600;">{{ cmd.callsign }}</code></td>
       <td><code style="font-family: var(--font-mono); color: var(--accent);">{{ cmd.command_name }}</code></td>
@@ -33,11 +36,27 @@
         </span>
       </td>
       <td>
+        {% if dup == 'exists' %}
+          <span class="health-badge failure" title="Service already has a command with this name">Already Exists</span>
+        {% elif dup == 'duplicate' %}
+          <span class="health-badge" style="background: rgba(255, 193, 7, 0.1); color: #ffc107;" title="Another pending suggestion for the same service has this name">Duplicate Pending</span>
+        {% else %}
+          <span class="health-badge success">New</span>
+        {% endif %}
+      </td>
+      <td>
         <div class="admin-actions">
+          {% if dup == 'ok' %}
           <form action="/admin/commands/{{ cmd.id }}/approve" method="POST" style="display: inline;">
             <button type="submit" class="admin-btn admin-btn-success admin-btn-sm">Approve</button>
           </form>
-          <form action="/admin/commands/{{ cmd.id }}/reject" method="POST" style="display: inline;" 
+          {% else %}
+          <form action="/admin/commands/{{ cmd.id }}/approve" method="POST" style="display: inline;"
+                onsubmit="return confirm('This command is already present on the service. Approving will discard the suggestion. Continue?');">
+            <button type="submit" class="admin-btn admin-btn-secondary admin-btn-sm" title="Discard duplicate suggestion">Discard</button>
+          </form>
+          {% endif %}
+          <form action="/admin/commands/{{ cmd.id }}/reject" method="POST" style="display: inline;"
                 onsubmit="return confirm('Reject this command suggestion?');">
             <button type="submit" class="admin-btn admin-btn-danger admin-btn-sm">Reject</button>
           </form>

@@ -1194,12 +1194,51 @@ async def admin_commands(
         # If sorting fails, just use unsorted list
         pass
 
+    # Annotate each pending entry with a duplicate status so the admin
+    # UI can warn before approval. Statuses:
+    #   "ok"        - safe to approve
+    #   "exists"    - service already has a command with this name
+    #   "duplicate" - another pending entry for the same service has the
+    #                 same name (only the first one shows ok)
+    services = APRSServices()
+    seen_pending_names: dict[tuple[str, str], str] = {}
+    annotated = []
+    for cmd in pending_list:
+        callsign = (cmd.callsign or "").upper()
+        name_norm = (cmd.command_name or "").strip().lower()
+        status = "ok"
+
+        # Check existing approved commands on the service
+        try:
+            service = services[callsign]
+            service_dict = service_to_dict(service)
+            existing_names = {
+                (c.get("name") or "").strip().lower()
+                for c in (service_dict.get("commands") or [])
+                if c.get("name")
+            }
+            if name_norm and name_norm in existing_names:
+                status = "exists"
+        except KeyError:
+            # Service is gone - mark as exists so admin knows to reject
+            status = "exists"
+
+        # Check for duplicates inside the pending queue itself
+        if status == "ok" and name_norm:
+            key = (callsign, name_norm)
+            if key in seen_pending_names:
+                status = "duplicate"
+            else:
+                seen_pending_names[key] = cmd.id
+
+        annotated.append({"cmd": cmd, "dup_status": status})
+
     return templates.TemplateResponse(
         request=request,
         name="admin/commands.html",
         context={
-            "pending_commands": pending_list,
-            "pending_commands_count": len(pending_list),
+            "pending_commands": annotated,
+            "pending_commands_count": len(annotated),
         },
     )
 
@@ -1224,13 +1263,30 @@ async def admin_approve_command(
     try:
         service = services[pending.callsign]
     except KeyError:
-        raise HTTPException(
-            status_code=404, detail=f"Service '{pending.callsign}' not found"
+        # Service is gone - just drop the pending entry
+        pending_store.remove(id)
+        LOG.info(
+            f"Admin approve: service '{pending.callsign}' missing, "
+            f"discarded pending command '{pending.command_name}'"
         )
+        return RedirectResponse(url="/admin/commands", status_code=303)
 
-    # Add command to service
     service_dict = service_to_dict(service)
-    commands = service_dict.get("commands", [])
+    commands = service_dict.get("commands", []) or []
+
+    # Skip duplicates - remove the pending entry but don't add another copy
+    pending_name = (pending.command_name or "").strip().lower()
+    existing_names = {
+        (c.get("name") or "").strip().lower() for c in commands if c.get("name")
+    }
+    if pending_name and pending_name in existing_names:
+        pending_store.remove(id)
+        LOG.info(
+            f"Admin approve: '{pending.command_name}' already exists on "
+            f"{pending.callsign}; discarded duplicate suggestion"
+        )
+        return RedirectResponse(url="/admin/commands", status_code=303)
+
     commands.append(
         {"name": pending.command_name, "description": pending.command_description}
     )
@@ -1494,16 +1550,25 @@ async def admin_delete_command(
     service_dict = service_to_dict(service)
     commands = service_dict.get("commands", []) or []
 
-    original_len = len(commands)
-    commands = [c for c in commands if c["name"].lower() != command_name.lower()]
+    # Remove only the first matching command (case-insensitive). If
+    # duplicates exist, repeated calls are required to remove them all -
+    # this matches the per-row delete UI behavior.
+    target = command_name.lower()
+    removed = False
+    new_commands = []
+    for c in commands:
+        if not removed and (c.get("name") or "").lower() == target:
+            removed = True
+            continue
+        new_commands.append(c)
 
-    if len(commands) == original_len:
+    if not removed:
         raise HTTPException(
             status_code=404,
             detail=f"Command '{command_name}' not found for service '{callsign_upper}'",
         )
 
-    service_dict["commands"] = commands
+    service_dict["commands"] = new_commands
     updated_service = registryRequest(**service_dict)
     services.add_and_persist(callsign_upper, updated_service)
 
