@@ -1407,17 +1407,61 @@ async def admin_trigger_health_check(
     callsign_upper = callsign.upper()
 
     try:
+        services[callsign_upper]  # Verify service exists
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+
+    # Trigger health check in background thread (check_service is sync)
+    thread = threading.Thread(target=check_service, args=(callsign_upper,))
+    thread.daemon = True
+    thread.start()
+
+    LOG.info(f"Admin triggered health check for {callsign_upper}")
+
+    return RedirectResponse(url=f"/admin/services/{callsign_upper}", status_code=303)
+
+
+@app.post(
+    "/admin/services/{callsign}/commands/{command_name}/delete",
+    response_class=HTMLResponse,
+)
+async def admin_delete_command(
+    request: Request,
+    callsign: str,
+    command_name: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Delete a single command from a service (admin web interface)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    callsign_upper = callsign.upper()
+
+    try:
         service = services[callsign_upper]
     except KeyError:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
 
-    # Trigger health check in background
-    import asyncio
+    service_dict = service_to_dict(service)
+    commands = service_dict.get("commands", []) or []
 
-    asyncio.create_task(check_service(callsign_upper, service))
+    original_len = len(commands)
+    commands = [c for c in commands if c["name"].lower() != command_name.lower()]
 
-    LOG.info(f"Admin triggered health check for {callsign_upper}")
+    if len(commands) == original_len:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Command '{command_name}' not found for service '{callsign_upper}'",
+        )
+
+    service_dict["commands"] = commands
+    updated_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign_upper, updated_service)
+
+    LOG.info(f"Admin deleted command '{command_name}' from {callsign_upper}")
 
     return RedirectResponse(url=f"/admin/services/{callsign_upper}", status_code=303)
