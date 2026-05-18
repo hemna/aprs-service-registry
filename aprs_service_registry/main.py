@@ -736,18 +736,63 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
             detail=f"Service '{callsign_upper}' not found",
         )
 
+    # Normalize and validate command name/description
+    command_name = data.command_name.strip()
+    command_description = data.command_description.strip()
+
+    if not command_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Command name is required",
+        )
+    if not command_description:
+        raise HTTPException(
+            status_code=400,
+            detail="Command description is required",
+        )
+
+    # Reject if the service already has a command with this name
+    service_dict = service_to_dict(_service)
+    existing_names = {
+        c["name"].strip().lower()
+        for c in (service_dict.get("commands") or [])
+        if c.get("name")
+    }
+    if command_name.lower() in existing_names:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Command '{command_name}' already exists for "
+                f"{callsign_upper}"
+            ),
+        )
+
+    # Reject if an identical command is already pending moderation
+    store = PendingCommandStore()
+    pending_for_service = store.get_by_callsign(callsign_upper)
+    pending_names = {
+        p.command_name.strip().lower() for p in pending_for_service if p.command_name
+    }
+    if command_name.lower() in pending_names:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A suggestion for command '{command_name}' is already "
+                f"pending review for {callsign_upper}"
+            ),
+        )
+
     # Create pending command
     pending = PendingCommand(
         id=str(uuid.uuid4()),
         callsign=callsign_upper,
-        command_name=data.command_name.strip(),
-        command_description=data.command_description.strip(),
+        command_name=command_name,
+        command_description=command_description,
         submitted_at=datetime.now(timezone.utc),
         submitted_by=submitter_callsign,
     )
 
     # Add to pending store
-    store = PendingCommandStore()
     store.add(pending)
 
     LOG.info(
