@@ -194,7 +194,20 @@ class RegistryDB:
             service = dict(row)
             service["featured"] = bool(service["featured"])
             service["commands"] = self._get_commands_unlocked(conn, callsign.upper())
+            self._parse_service_timestamps(service)
             return service
+
+    def _parse_service_timestamps(self, service: dict):
+        """Parse created_at and updated_at strings to datetime objects."""
+        for field in ("created_at", "updated_at"):
+            val = service.get(field)
+            if val and isinstance(val, str):
+                try:
+                    service[field] = datetime.fromisoformat(
+                        val.replace("Z", "+00:00")
+                    )
+                except (ValueError, TypeError):
+                    pass
 
     def get_all_services(self, status_filter: set | None = None) -> list[dict]:
         """Get all services, optionally filtered by status."""
@@ -217,6 +230,7 @@ class RegistryDB:
                 service["commands"] = self._get_commands_unlocked(
                     conn, service["callsign"]
                 )
+                self._parse_service_timestamps(service)
                 services.append(service)
             return services
 
@@ -346,6 +360,7 @@ class RegistryDB:
                 service["commands"] = self._get_commands_unlocked(
                     conn, service["callsign"]
                 )
+                self._parse_service_timestamps(service)
                 services.append(service)
             return services
 
