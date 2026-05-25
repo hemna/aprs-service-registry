@@ -34,7 +34,6 @@ def server(ctx):
     LOG.info(
         f"APRS Service Registry Started version: {aprs_service_registry.__version__}"
     )
-    registry_main.APRSServices().load()
 
     server = Server(
         Config(
@@ -48,7 +47,6 @@ def server(ctx):
     log.setup_logging()
     server.run()
     LOG.info("APRS Service Registry Stopped")
-    registry_main.APRSServices().save()
 
 
 @cli.command()
