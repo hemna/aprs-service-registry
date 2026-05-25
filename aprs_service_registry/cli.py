@@ -59,6 +59,56 @@ def version(ctx):
     click.secho(f"{aprs_service_registry.__version__}", fg="yellow", bold=True)
 
 
+@cli.command()
+@cli_helper.add_options(cli_helper.common_options)
+@click.pass_context
+@cli_helper.process_standard_options
+def seed(ctx):
+    """Seed the registry with known APRS services."""
+    from aprs_service_registry.main import APRSServices, registryRequest
+
+    services = APRSServices()
+    services.load()
+
+    known_services = [
+        {
+            "callsign": "FIND",
+            "description": (
+                "APRS station lookup service. Send a callsign to retrieve "
+                "last heard time, IGate station, speed, distance, and grid square."
+            ),
+            "service_website": "https://aprs.wiki/find/",
+            "software": "aprsd",
+            "callsign_owner": None,
+            "status": "active",
+            "health_check_command": None,
+            "commands": [
+                {
+                    "name": "CALL-SSID",
+                    "description": (
+                        "Look up a station by callsign (e.g., K7TME-9). "
+                        "Returns last heard, IGate, speed, distance, grid square."
+                    ),
+                },
+            ],
+            "featured": False,
+        },
+    ]
+
+    added = 0
+    for svc_data in known_services:
+        callsign = svc_data["callsign"]
+        if callsign in services.data:
+            click.echo(f"  {callsign} already exists, skipping.")
+            continue
+        service = registryRequest(**svc_data)
+        services.add_and_persist(callsign, service)
+        click.echo(f"  {callsign} registered.")
+        added += 1
+
+    click.echo(f"\nDone. Added {added} service(s), {len(known_services) - added} skipped.")
+
+
 def main():
     cli(auto_envvar_prefix="APRS_SERVICE_REGISTRY")
 

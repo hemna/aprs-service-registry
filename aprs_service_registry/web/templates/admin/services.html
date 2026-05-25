@@ -3,9 +3,17 @@
 {% block title %}Services{% endblock %}
 
 {% block content %}
-<div class="admin-header">
-  <h1>Services</h1>
-  <p>Manage registered APRS services</p>
+<div class="admin-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+  <div>
+    <h1>Services</h1>
+    <p>Manage registered APRS services</p>
+  </div>
+  <a href="/admin/services/new" class="admin-btn admin-btn-primary">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+    </svg>
+    Add New Service
+  </a>
 </div>
 
 {% if services %}

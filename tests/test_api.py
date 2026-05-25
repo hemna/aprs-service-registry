@@ -553,3 +553,110 @@ class TestHealthCheckInResponse:
 
         assert "last_health_check" in service
         assert service["last_health_check"] is None
+
+
+class TestAdminCreateService:
+    """Tests for the admin create service endpoint (POST /admin/services/new)."""
+
+    def setup_method(self):
+        """Clear services and enable admin before each test."""
+        services = APRSServices()
+        services.data = {}
+        from oslo_config import cfg
+
+        cfg.CONF.set_override("admin_password", "testpass", group="registry")
+
+    def teardown_method(self):
+        """Reset admin password after each test."""
+        from oslo_config import cfg
+
+        cfg.CONF.set_override("admin_password", "", group="registry")
+
+    def _auth(self):
+        return ("admin", "testpass")
+
+    def test_create_service_success(self):
+        """Admin can create a new service via the form."""
+        response = client.post(
+            "/admin/services/new",
+            data={
+                "callsign": "FIND",
+                "description": "APRS station lookup service",
+                "service_website": "https://aprs.wiki/find/",
+                "software": "aprsd",
+                "callsign_owner": "",
+                "status": "active",
+                "health_check_command": "",
+                "featured": "",
+            },
+            auth=self._auth(),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert "/admin/services/FIND" in response.headers["location"]
+
+        # Verify service was persisted
+        services = APRSServices()
+        assert "FIND" in services.data
+        svc = services["FIND"]
+        assert svc.description == "APRS station lookup service"
+        assert svc.service_website == "https://aprs.wiki/find/"
+
+    def test_create_service_duplicate(self):
+        """Creating a duplicate callsign returns an error."""
+        services = APRSServices()
+        services.add(
+            "DUPE",
+            registryRequest(
+                callsign="DUPE",
+                description="Existing",
+                service_website="https://example.com",
+                software="test",
+            ),
+        )
+
+        response = client.post(
+            "/admin/services/new",
+            data={
+                "callsign": "DUPE",
+                "description": "Another one",
+                "service_website": "https://example.com",
+                "software": "test",
+            },
+            auth=self._auth(),
+            follow_redirects=False,
+        )
+        # Should return 200 with error message, not redirect
+        assert response.status_code == 200
+        assert "already exists" in response.text
+
+    def test_create_service_missing_callsign(self):
+        """Creating a service without callsign returns an error."""
+        response = client.post(
+            "/admin/services/new",
+            data={
+                "callsign": "",
+                "description": "No callsign",
+                "service_website": "https://example.com",
+                "software": "test",
+            },
+            auth=self._auth(),
+            follow_redirects=False,
+        )
+        assert response.status_code == 200
+        assert "required" in response.text.lower()
+
+    def test_create_service_unauthenticated(self):
+        """Unauthenticated requests are rejected."""
+        response = client.post(
+            "/admin/services/new",
+            data={"callsign": "TEST"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 401
+
+    def test_get_new_service_form(self):
+        """Admin can access the new service form."""
+        response = client.get("/admin/services/new", auth=self._auth())
+        assert response.status_code == 200
+        assert "Add New Service" in response.text

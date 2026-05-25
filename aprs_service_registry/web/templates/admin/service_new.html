@@ -1,0 +1,98 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Add New Service{% endblock %}
+
+{% block content %}
+<a href="/admin/services" class="admin-back">
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+  </svg>
+  Back to Services
+</a>
+
+<div class="admin-header">
+  <h1>Add New Service</h1>
+  <p>Manually register a new APRS service</p>
+</div>
+
+{% if error %}
+<div style="background: rgba(220, 53, 69, 0.1); border: 1px solid rgba(220, 53, 69, 0.3); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; color: #dc3545;">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="admin-card" style="max-width: 600px;">
+  <div class="admin-card-header">Service Details</div>
+  <div class="admin-card-body">
+    <form action="/admin/services/new" method="POST">
+      <div class="admin-form-group">
+        <label for="callsign">Callsign <span style="color: #dc3545;">*</span></label>
+        <input type="text" id="callsign" name="callsign" class="admin-input" 
+               required placeholder="e.g., FIND, SMSGTE, EMAIL-2"
+               style="text-transform: uppercase;">
+        <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+          The APRS callsign/SSID that the service listens on
+        </small>
+      </div>
+
+      <div class="admin-form-group">
+        <label for="description">Description <span style="color: #dc3545;">*</span></label>
+        <textarea id="description" name="description" class="admin-textarea" 
+                  required placeholder="Brief description of what this service does"></textarea>
+      </div>
+      
+      <div class="admin-form-group">
+        <label for="service_website">Website</label>
+        <input type="url" id="service_website" name="service_website" class="admin-input" 
+               placeholder="https://...">
+      </div>
+      
+      <div class="admin-form-group">
+        <label for="software">Software</label>
+        <input type="text" id="software" name="software" class="admin-input" 
+               placeholder="e.g., aprsd 3.4.0, custom, etc.">
+      </div>
+      
+      <div class="admin-form-group">
+        <label for="callsign_owner">Owner Callsign</label>
+        <input type="text" id="callsign_owner" name="callsign_owner" class="admin-input" 
+               placeholder="e.g., K7TME">
+      </div>
+      
+      <div class="admin-form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status" class="admin-select">
+          <option value="active">Active</option>
+          <option value="pending">Pending</option>
+          <option value="down">Down</option>
+        </select>
+      </div>
+      
+      <div class="admin-form-group">
+        <label for="health_check_command">Health Check Command</label>
+        <input type="text" id="health_check_command" name="health_check_command" class="admin-input" 
+               placeholder="e.g., ping">
+        <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+          The APRS message to send for health checks (leave blank to disable)
+        </small>
+      </div>
+      
+      <div class="admin-form-group">
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+          <input type="checkbox" id="featured" name="featured" value="true"
+                 style="width: auto; margin: 0;">
+          Featured Service
+        </label>
+        <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+          Featured services are highlighted in the registry listing
+        </small>
+      </div>
+      
+      <div class="admin-actions">
+        <button type="submit" class="admin-btn admin-btn-primary">Create Service</button>
+        <a href="/admin/services" class="admin-btn admin-btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

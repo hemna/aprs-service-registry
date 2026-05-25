@@ -1371,6 +1371,86 @@ async def admin_services(
     )
 
 
+@app.get("/admin/services/new", response_class=HTMLResponse)
+async def admin_new_service_form(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Admin page for adding a new service."""
+    verify_admin(credentials)
+
+    # Get pending commands count for sidebar badge
+    pending_store = PendingCommandStore()
+    pending_commands_count = len(pending_store.data)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/service_new.html",
+        context={
+            "pending_commands_count": pending_commands_count,
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/services/new", response_class=HTMLResponse)
+async def admin_create_service(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Create a new service (admin web interface)."""
+    verify_admin(credentials)
+
+    services = APRSServices()
+    form = await request.form()
+
+    callsign = (form.get("callsign") or "").strip().upper()
+    if not callsign:
+        pending_store = PendingCommandStore()
+        pending_commands_count = len(pending_store.data)
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/service_new.html",
+            context={
+                "pending_commands_count": pending_commands_count,
+                "error": "Callsign is required.",
+            },
+        )
+
+    # Check if service already exists
+    if callsign in services.data:
+        pending_store = PendingCommandStore()
+        pending_commands_count = len(pending_store.data)
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/service_new.html",
+            context={
+                "pending_commands_count": pending_commands_count,
+                "error": f"Service '{callsign}' already exists.",
+            },
+        )
+
+    # Build service from form data
+    service_dict = {
+        "callsign": callsign,
+        "description": form.get("description", "").strip(),
+        "service_website": form.get("service_website", "").strip(),
+        "software": form.get("software", "").strip(),
+        "callsign_owner": form.get("callsign_owner", "").strip() or None,
+        "status": form.get("status", "active"),
+        "health_check_command": form.get("health_check_command", "").strip() or None,
+        "featured": form.get("featured") == "true",
+        "commands": [],
+    }
+
+    new_service = registryRequest(**service_dict)
+    services.add_and_persist(callsign, new_service)
+
+    LOG.info(f"Admin created new service {callsign}")
+
+    return RedirectResponse(url=f"/admin/services/{callsign}", status_code=303)
+
+
 @app.get("/admin/services/{callsign}", response_class=HTMLResponse)
 async def admin_service_detail(
     request: Request,
