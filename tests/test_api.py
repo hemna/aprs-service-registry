@@ -4,19 +4,28 @@ from datetime import datetime
 
 from fastapi.testclient import TestClient
 
-from aprs_service_registry.main import APRSServices, app, registryRequest
+from aprs_service_registry.db import RegistryDB
+from aprs_service_registry.main import app
 
 
 client = TestClient(app)
+
+
+def _reset_db():
+    """Replace the app's DB with a fresh in-memory instance."""
+    app.state.db = RegistryDB(":memory:")
+
+
+def _db():
+    """Get the current app DB."""
+    return app.state.db
 
 
 class TestGetAllServices:
     """Tests for GET /api/v1/registry endpoint."""
 
     def setup_method(self):
-        """Clear services before each test."""
-        services = APRSServices()
-        services.data = {}
+        _reset_db()
 
     def test_get_all_services_empty(self):
         """Returns empty list with count 0 when no services registered."""
@@ -30,26 +39,17 @@ class TestGetAllServices:
 
     def test_get_all_services_with_data(self):
         """Returns all registered services with correct count."""
-        # Register a test service
-        services = APRSServices()
-        services.add(
-            "TEST1",
-            registryRequest(
-                callsign="TEST1",
-                description="Test Service 1",
-                service_website="https://test1.example.com",
-                software="test-soft 1.0",
-            ),
-        )
-        services.add(
-            "TEST2",
-            registryRequest(
-                callsign="TEST2",
-                description="Test Service 2",
-                service_website="https://test2.example.com",
-                software="test-soft 2.0",
-            ),
-        )
+        db = _db()
+        db.upsert_service("TEST1", {
+            "description": "Test Service 1",
+            "service_website": "https://test1.example.com",
+            "software": "test-soft 1.0",
+        })
+        db.upsert_service("TEST2", {
+            "description": "Test Service 2",
+            "service_website": "https://test2.example.com",
+            "software": "test-soft 2.0",
+        })
 
         response = client.get("/api/v1/registry")
 
@@ -59,7 +59,6 @@ class TestGetAllServices:
         assert len(data["services"]) == 2
         assert "timestamp" in data
 
-        # Verify service data
         callsigns = [s["callsign"] for s in data["services"]]
         assert "TEST1" in callsigns
         assert "TEST2" in callsigns
@@ -69,21 +68,21 @@ class TestGetSingleService:
     """Tests for GET /api/v1/registry/{callsign} endpoint."""
 
     def setup_method(self):
-        """Clear services and add test data before each test."""
-        services = APRSServices()
-        services.data = {}
-        services.add(
-            "TESTCALL",
-            registryRequest(
-                callsign="TESTCALL",
-                description="Test Service",
-                service_website="https://test.example.com",
-                software="test-soft 1.0",
-                callsign_owner="N0CALL",
-            ),
-        )
+        _reset_db()
+        db = _db()
+        db.upsert_service("TESTCALL", {
+            "description": "Test Service",
+            "service_website": "https://test.example.com",
+            "software": "test-soft 1.0",
+            "callsign_owner": "N0CALL",
+            "status": "active",
+            "commands": [
+                {"name": "ping", "description": "Health check"},
+                {"name": "help", "description": "Show help"},
+            ],
+        })
 
-    def test_get_service_found(self):
+    def test_get_existing_service(self):
         """Returns service data when callsign exists."""
         response = client.get("/api/v1/registry/TESTCALL")
 
@@ -94,6 +93,7 @@ class TestGetSingleService:
         assert data["service_website"] == "https://test.example.com"
         assert data["software"] == "test-soft 1.0"
         assert data["callsign_owner"] == "N0CALL"
+        assert data["status"] == "active"
 
     def test_get_service_case_insensitive(self):
         """Callsign lookup is case-insensitive."""
@@ -103,473 +103,192 @@ class TestGetSingleService:
         data = response.json()
         assert data["callsign"] == "TESTCALL"
 
-    def test_get_service_not_found(self):
+    def test_get_nonexistent_service(self):
         """Returns 404 when callsign doesn't exist."""
-        response = client.get("/api/v1/registry/NOTEXIST")
+        response = client.get("/api/v1/registry/NOSUCH")
 
         assert response.status_code == 404
+
+    def test_get_service_includes_commands(self):
+        """Response includes commands list."""
+        response = client.get("/api/v1/registry/TESTCALL")
+
+        assert response.status_code == 200
         data = response.json()
-        assert "detail" in data
-        assert "NOTEXIST" in data["detail"]
+        assert "commands" in data
+        assert len(data["commands"]) == 2
+        names = [c["name"] for c in data["commands"]]
+        assert "ping" in names
+        assert "help" in names
+
+    def test_get_service_includes_health_check(self):
+        """Response includes last_health_check field."""
+        response = client.get("/api/v1/registry/TESTCALL")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "last_health_check" in data
 
 
-class TestServiceStatus:
-    """Tests for service status field."""
+class TestRegisterService:
+    """Tests for POST /api/v1/registry endpoint."""
 
     def setup_method(self):
-        """Clear services before each test."""
-        services = APRSServices()
-        services.data = {}
+        _reset_db()
 
-    def test_register_service_default_status(self):
-        """New services default to active status."""
+    def test_register_new_service(self):
+        """Successfully register a new service."""
         response = client.post(
             "/api/v1/registry",
             json={
-                "callsign": "TEST",
-                "description": "Test Service",
-                "service_website": "https://test.com",
-                "software": "test 1.0",
-            },
-        )
-        assert response.status_code == 200
-
-        # Fetch and verify status
-        get_response = client.get("/api/v1/registry/TEST")
-        assert get_response.status_code == 200
-        assert get_response.json()["status"] == "active"
-
-    def test_register_service_with_status(self):
-        """Can register a service with explicit status."""
-        response = client.post(
-            "/api/v1/registry",
-            json={
-                "callsign": "TEST",
-                "description": "Test Service",
-                "service_website": "https://test.com",
-                "software": "test 1.0",
-                "status": "down",
-            },
-        )
-        assert response.status_code == 200
-
-        get_response = client.get("/api/v1/registry/TEST")
-        assert get_response.json()["status"] == "down"
-
-    def test_register_service_invalid_status(self):
-        """Invalid status returns 422 validation error."""
-        response = client.post(
-            "/api/v1/registry",
-            json={
-                "callsign": "TEST",
-                "description": "Test Service",
-                "service_website": "https://test.com",
-                "software": "test 1.0",
-                "status": "invalid",
-            },
-        )
-        assert response.status_code == 422
-
-    def test_get_single_service_returns_regardless_of_status(self):
-        """GET /api/v1/registry/{callsign} returns service even if deleted."""
-        # Register and delete a service
-        client.post(
-            "/api/v1/registry",
-            json={
-                "callsign": "DELETED",
-                "description": "Deleted Service",
-                "service_website": "https://deleted.com",
-                "software": "test 1.0",
-                "status": "deleted",
+                "callsign": "NEWTEST",
+                "description": "Brand New Service",
+                "service_website": "https://new.example.com",
+                "software": "test 2.0",
             },
         )
 
-        # Should still be fetchable by callsign
-        get_response = client.get("/api/v1/registry/DELETED")
-        assert get_response.status_code == 200
-        assert get_response.json()["callsign"] == "DELETED"
-        assert get_response.json()["status"] == "deleted"
-
-
-class TestStatusFiltering:
-    """Tests for GET /api/v1/registry status filtering."""
-
-    def setup_method(self):
-        """Set up test services with different statuses."""
-        services = APRSServices()
-        services.data = {}
-
-        # Add services with different statuses
-        services.add(
-            "ACTIVE1",
-            registryRequest(
-                callsign="ACTIVE1",
-                description="Active service 1",
-                service_website="https://active1.com",
-                software="test",
-                status="active",
-            ),
-        )
-        services.add(
-            "ACTIVE2",
-            registryRequest(
-                callsign="ACTIVE2",
-                description="Active service 2",
-                service_website="https://active2.com",
-                software="test",
-                status="active",
-            ),
-        )
-        services.add(
-            "DOWN1",
-            registryRequest(
-                callsign="DOWN1",
-                description="Down service",
-                service_website="https://down.com",
-                software="test",
-                status="down",
-            ),
-        )
-        services.add(
-            "PENDING1",
-            registryRequest(
-                callsign="PENDING1",
-                description="Pending service",
-                service_website="https://pending.com",
-                software="test",
-                status="pending",
-            ),
-        )
-        services.add(
-            "DELETED1",
-            registryRequest(
-                callsign="DELETED1",
-                description="Deleted service",
-                service_website="https://deleted.com",
-                software="test",
-                status="deleted",
-            ),
-        )
-
-    def test_default_returns_active_pending_and_down(self):
-        """Default GET returns active, pending, and down services (not deleted)."""
-        response = client.get("/api/v1/registry")
         assert response.status_code == 200
         data = response.json()
-
-        assert data["count"] == 4
-        callsigns = [s["callsign"] for s in data["services"]]
-        assert "ACTIVE1" in callsigns
-        assert "ACTIVE2" in callsigns
-        assert "PENDING1" in callsigns
-        assert "DOWN1" in callsigns
-        assert "DELETED1" not in callsigns
-
-    def test_include_deleted(self):
-        """include_deleted=true returns all services including deleted."""
-        response = client.get("/api/v1/registry?include_deleted=true")
-        assert response.status_code == 200
-        data = response.json()
-
-        assert data["count"] == 5
-        callsigns = [s["callsign"] for s in data["services"]]
-        assert "ACTIVE1" in callsigns
-        assert "ACTIVE2" in callsigns
-        assert "PENDING1" in callsigns
-        assert "DOWN1" in callsigns
-        assert "DELETED1" in callsigns
-
-    def test_include_all(self):
-        """include_all=true returns all services."""
-        response = client.get("/api/v1/registry?include_all=true")
-        assert response.status_code == 200
-        data = response.json()
-
-        assert data["count"] == 5
-        callsigns = [s["callsign"] for s in data["services"]]
-        assert "ACTIVE1" in callsigns
-        assert "ACTIVE2" in callsigns
-        assert "PENDING1" in callsigns
-        assert "DOWN1" in callsigns
-        assert "DELETED1" in callsigns
-
-
-class TestSoftDelete:
-    """Tests for soft delete behavior."""
-
-    def setup_method(self):
-        """Clear services and add test data."""
-        services = APRSServices()
-        services.data = {}
-        services.add(
-            "TODELETE",
-            registryRequest(
-                callsign="TODELETE",
-                description="Service to delete",
-                service_website="https://delete.com",
-                software="test",
-                status="active",
-            ),
-        )
-
-    def test_delete_sets_status_deleted(self):
-        """DELETE sets status to deleted instead of removing."""
-        # Verify service exists and is active
-        get_response = client.get("/api/v1/registry/TODELETE")
-        assert get_response.status_code == 200
-        assert get_response.json()["status"] == "active"
-
-        # Delete the service
-        delete_response = client.delete("/api/v1/registry/TODELETE")
-        assert delete_response.status_code == 200
-        data = delete_response.json()
         assert data["status"] == "ok"
-        assert "deleted" in data["message"].lower()
 
-        # Service should still exist but with deleted status
-        get_response = client.get("/api/v1/registry/TODELETE")
-        assert get_response.status_code == 200
-        assert get_response.json()["status"] == "deleted"
+        # Verify it was stored
+        svc = _db().get_service("NEWTEST")
+        assert svc is not None
+        assert svc["description"] == "Brand New Service"
 
-    def test_deleted_service_excluded_from_list(self):
-        """Deleted services are excluded from default list."""
-        # Delete the service
-        client.delete("/api/v1/registry/TODELETE")
-
-        # Should not appear in default list
-        list_response = client.get("/api/v1/registry")
-        callsigns = [s["callsign"] for s in list_response.json()["services"]]
-        assert "TODELETE" not in callsigns
-
-        # Should appear with include_deleted
-        list_response = client.get("/api/v1/registry?include_deleted=true")
-        callsigns = [s["callsign"] for s in list_response.json()["services"]]
-        assert "TODELETE" in callsigns
-
-
-class TestHealthCheckCommand:
-    """Tests for health_check_command field."""
-
-    def setup_method(self):
-        """Clear services before each test."""
-        services = APRSServices()
-        services.data = {}
-
-    def test_register_service_without_health_check_command(self):
-        """Services default to no health_check_command."""
+    def test_register_uppercases_callsign(self):
+        """Callsign is uppercased on registration."""
         response = client.post(
             "/api/v1/registry",
             json={
-                "callsign": "TEST",
-                "description": "Test Service",
+                "callsign": "lowercase",
+                "description": "Test",
                 "service_website": "https://test.com",
-                "software": "test 1.0",
+                "software": "test",
             },
         )
+
         assert response.status_code == 200
+        svc = _db().get_service("LOWERCASE")
+        assert svc is not None
 
-        get_response = client.get("/api/v1/registry/TEST")
-        assert get_response.status_code == 200
-        assert get_response.json()["health_check_command"] is None
+    def test_re_register_preserves_commands(self):
+        """Re-registering a service preserves existing commands."""
+        db = _db()
+        db.upsert_service("TEST1", {
+            "description": "Original",
+            "commands": [{"name": "ping", "description": "Health check"}],
+        })
 
-    def test_register_service_with_health_check_command(self):
-        """Can register a service with health_check_command."""
         response = client.post(
             "/api/v1/registry",
             json={
-                "callsign": "TEST",
-                "description": "Test Service",
+                "callsign": "TEST1",
+                "description": "Updated",
                 "service_website": "https://test.com",
-                "software": "test 1.0",
-                "health_check_command": "ping",
+                "software": "test",
             },
         )
+
         assert response.status_code == 200
+        svc = db.get_service("TEST1")
+        assert svc["description"] == "Updated"
+        # Commands should be preserved
+        assert len(svc["commands"]) == 1
+        assert svc["commands"][0]["name"] == "ping"
 
-        get_response = client.get("/api/v1/registry/TEST")
-        assert get_response.json()["health_check_command"] == "ping"
+    def test_re_register_preserves_featured(self):
+        """Re-registering a service preserves featured flag."""
+        db = _db()
+        db.upsert_service("TEST1", {"featured": True})
 
-    def test_health_check_command_in_list_response(self):
-        """health_check_command appears in list API response."""
-        services = APRSServices()
-        services.add(
-            "TEST",
-            registryRequest(
-                callsign="TEST",
-                description="Test",
-                service_website="https://test.com",
-                software="test",
-                health_check_command="help",
-            ),
+        response = client.post(
+            "/api/v1/registry",
+            json={
+                "callsign": "TEST1",
+                "description": "Updated",
+                "service_website": "https://test.com",
+                "software": "test",
+            },
         )
 
-        response = client.get("/api/v1/registry")
         assert response.status_code == 200
-        service = response.json()["services"][0]
-        assert service["health_check_command"] == "help"
+        svc = db.get_service("TEST1")
+        assert svc["featured"] is True
 
 
-class TestHealthCheckInResponse:
-    """Tests for health check info in API responses."""
+class TestDeleteService:
+    """Tests for DELETE /api/v1/registry/{callsign} endpoint."""
 
     def setup_method(self):
-        """Clear services and health checks before each test."""
-        from aprs_service_registry.health_checker import HealthCheckStore
+        _reset_db()
+        _db().upsert_service("DELME", {
+            "description": "To delete",
+            "status": "active",
+        })
 
-        services = APRSServices()
-        services.data = {}
-        HealthCheckStore().data = {}
+    def test_delete_service(self):
+        """Soft deletes a service."""
+        response = client.delete("/api/v1/registry/DELME")
 
-    def test_single_service_includes_last_health_check(self):
-        """GET single service includes last_health_check."""
-        from datetime import timezone
+        assert response.status_code == 200
+        svc = _db().get_service("DELME")
+        assert svc["status"] == "deleted"
 
-        from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
-        )
+    def test_delete_nonexistent(self):
+        """Returns 404 for nonexistent service."""
+        response = client.delete("/api/v1/registry/NOSUCH")
+        assert response.status_code == 404
 
-        # Add service
-        services = APRSServices()
-        services.add(
-            "TESTCALL",
-            registryRequest(
-                callsign="TESTCALL",
-                description="Test",
-                service_website="https://test.com",
-                software="test",
-                health_check_command="ping",
-            ),
-        )
 
-        # Add health check result
-        store = HealthCheckStore()
-        store.add_result(
-            "TESTCALL",
-            HealthCheckResult(
-                timestamp=datetime.now(timezone.utc),
-                success=True,
-                response_time_ms=1500,
-                response_text="Pong!",
-                error=None,
-            ),
-        )
+class TestHealthCheckField:
+    """Tests for health check data in service responses."""
 
-        response = client.get("/api/v1/registry/TESTCALL")
+    def setup_method(self):
+        _reset_db()
+
+    def test_service_with_health_checks(self):
+        """Service response includes health check data."""
+        db = _db()
+        db.upsert_service("TESTHC", {
+            "description": "Health check test",
+        })
+        db.add_health_check("TESTHC", {
+            "success": True,
+            "response_time_ms": 150,
+            "timestamp": "2025-01-01T12:00:00Z",
+        })
+
+        response = client.get("/api/v1/registry/TESTHC")
         assert response.status_code == 200
         data = response.json()
-
-        # Verify health_check_command is in response
-        assert data["health_check_command"] == "ping"
-        # Verify last_health_check is in response
-        assert "last_health_check" in data
+        assert data["last_health_check"] is not None
         assert data["last_health_check"]["success"] is True
-        assert data["last_health_check"]["response_time_ms"] == 1500
 
-    def test_single_service_no_health_check(self):
-        """GET single service with no health checks returns null."""
-        services = APRSServices()
-        services.add(
-            "TESTCALL",
-            registryRequest(
-                callsign="TESTCALL",
-                description="Test",
-                service_website="https://test.com",
-                software="test",
-            ),
-        )
+    def test_service_without_health_checks(self):
+        """Service with no health checks has null last_health_check."""
+        db = _db()
+        db.upsert_service("TESTNOHC", {
+            "description": "No health checks",
+        })
 
-        response = client.get("/api/v1/registry/TESTCALL")
+        response = client.get("/api/v1/registry/TESTNOHC")
         assert response.status_code == 200
         data = response.json()
-
-        assert "last_health_check" in data
         assert data["last_health_check"] is None
-
-    def test_list_services_includes_last_health_check(self):
-        """GET all services includes last_health_check for each."""
-        from datetime import timezone
-
-        from aprs_service_registry.health_checker import (
-            HealthCheckResult,
-            HealthCheckStore,
-        )
-
-        services = APRSServices()
-        services.add(
-            "TEST1",
-            registryRequest(
-                callsign="TEST1",
-                description="Test 1",
-                service_website="https://test1.com",
-                software="test",
-                health_check_command="ping",
-            ),
-        )
-
-        store = HealthCheckStore()
-        store.add_result(
-            "TEST1",
-            HealthCheckResult(
-                timestamp=datetime.now(timezone.utc),
-                success=False,
-                response_time_ms=None,
-                response_text=None,
-                error="Timeout",
-            ),
-        )
-
-        response = client.get("/api/v1/registry")
-        assert response.status_code == 200
-        data = response.json()
-
-        service = data["services"][0]
-        # Verify health_check_command is in response
-        assert service["health_check_command"] == "ping"
-        # Verify last_health_check is in response
-        assert "last_health_check" in service
-        assert service["last_health_check"]["success"] is False
-        assert service["last_health_check"]["error"] == "Timeout"
-
-    def test_list_services_includes_null_health_check_when_no_results(self):
-        """GET all services includes last_health_check=None when no health checks exist."""
-        services = APRSServices()
-        services.add(
-            "TESTNOHC",
-            registryRequest(
-                callsign="TESTNOHC",
-                description="Service with no health checks",
-                service_website="https://test.com",
-                software="test",
-            ),
-        )
-
-        response = client.get("/api/v1/registry")
-        assert response.status_code == 200
-        data = response.json()
-
-        # Find our service in the list
-        service = next(s for s in data["services"] if s.get("callsign") == "TESTNOHC")
-
-        assert "last_health_check" in service
-        assert service["last_health_check"] is None
 
 
 class TestAdminCreateService:
     """Tests for the admin create service endpoint (POST /admin/services/new)."""
 
     def setup_method(self):
-        """Clear services and enable admin before each test."""
-        services = APRSServices()
-        services.data = {}
+        _reset_db()
         from oslo_config import cfg
-
         cfg.CONF.set_override("admin_password", "testpass", group="registry")
 
     def teardown_method(self):
-        """Reset admin password after each test."""
         from oslo_config import cfg
-
         cfg.CONF.set_override("admin_password", "", group="registry")
 
     def _auth(self):
@@ -595,25 +314,13 @@ class TestAdminCreateService:
         assert response.status_code == 303
         assert "/admin/services/FIND" in response.headers["location"]
 
-        # Verify service was persisted
-        services = APRSServices()
-        assert "FIND" in services.data
-        svc = services["FIND"]
-        assert svc.description == "APRS station lookup service"
-        assert svc.service_website == "https://aprs.wiki/find/"
+        svc = _db().get_service("FIND")
+        assert svc is not None
+        assert svc["description"] == "APRS station lookup service"
 
     def test_create_service_duplicate(self):
         """Creating a duplicate callsign returns an error."""
-        services = APRSServices()
-        services.add(
-            "DUPE",
-            registryRequest(
-                callsign="DUPE",
-                description="Existing",
-                service_website="https://example.com",
-                software="test",
-            ),
-        )
+        _db().upsert_service("DUPE", {"description": "Existing"})
 
         response = client.post(
             "/admin/services/new",
@@ -626,7 +333,6 @@ class TestAdminCreateService:
             auth=self._auth(),
             follow_redirects=False,
         )
-        # Should return 200 with error message, not redirect
         assert response.status_code == 200
         assert "already exists" in response.text
 

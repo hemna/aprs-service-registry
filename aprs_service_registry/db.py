@@ -7,7 +7,7 @@ single SQLite database as the canonical data store.
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -441,6 +441,14 @@ class RegistryDB:
             for row in rows:
                 r = dict(row)
                 r["success"] = bool(r["success"])
+                # Parse timestamp to datetime for template compatibility
+                if r.get("timestamp") and isinstance(r["timestamp"], str):
+                    try:
+                        r["timestamp"] = datetime.fromisoformat(
+                            r["timestamp"].replace("Z", "+00:00")
+                        )
+                    except (ValueError, TypeError):
+                        pass
                 results.append(r)
             return results
 
@@ -582,14 +590,11 @@ class RegistryDB:
 
     def apply_retention(self, health_check_days: int = 90) -> int:
         """Delete health check records older than the specified retention period."""
-        cutoff = datetime.now(timezone.utc)
-        from datetime import timedelta
-        cutoff = (cutoff - timedelta(days=health_check_days)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        cutoff = datetime.now(timezone.utc) - timedelta(days=health_check_days)
+        cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
         with self._connect() as conn:
             cursor = conn.execute(
-                "DELETE FROM health_checks WHERE timestamp < ?", (cutoff,)
+                "DELETE FROM health_checks WHERE timestamp < ?", (cutoff_str,)
             )
             deleted = cursor.rowcount
             if deleted > 0:

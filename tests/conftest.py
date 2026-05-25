@@ -16,3 +16,5 @@ def register_config():
         common.register_opts(CONF)
     # Set enable_save to False for tests to avoid file I/O
     CONF.set_override("enable_save", False, group="registry")
+    # Use in-memory SQLite for tests
+    CONF.set_override("db_path", ":memory:", group="registry")

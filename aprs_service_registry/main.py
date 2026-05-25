@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 
-import wrapt
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -20,9 +19,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from aprs_service_registry import conf, gitstore, objectstore, utils  # noqa
+from aprs_service_registry import conf, utils  # noqa
+from aprs_service_registry.db import RegistryDB
 from aprs_service_registry.health_checker import (
-    HealthCheckStore,
     calculate_uptime,
     check_service,
     get_checkable_services,
@@ -43,40 +42,11 @@ _WEB_DIR = Path(__file__).resolve().parent / "web"
 limiter = Limiter(key_func=get_remote_address)
 
 
-def service_to_dict(service) -> dict:
-    """Convert a service model to a dictionary.
-
-    Handles both Pydantic v1 (.dict()) and v2 (.model_dump()) APIs.
-    Also sets default status for legacy services.
-    """
-    try:
-        data = service.model_dump()
-    except AttributeError:
-        data = service.dict()
-
-    # Default status for legacy services
-    if "status" not in data or data["status"] is None:
-        data["status"] = "active"
-
-    return data
-
-
-def attach_last_health_check(service_dict: dict, callsign: str, store) -> None:
-    """Attach last_health_check info to a service dictionary.
-
-    Args:
-        service_dict: The service dictionary to modify (in-place)
-        callsign: The service callsign
-        store: HealthCheckStore instance
-    """
-    last_result = store.get_last_result(callsign)
-    if last_result:
-        service_dict["last_health_check"] = {
-            "timestamp": last_result.timestamp.isoformat(),
-            "success": last_result.success,
-            "response_time_ms": last_result.response_time_ms,
-            "error": last_result.error,
-        }
+def attach_last_health_check(service_dict: dict, callsign: str, db: RegistryDB) -> None:
+    """Attach last_health_check info to a service dictionary."""
+    last = db.get_last_health_check(callsign)
+    if last:
+        service_dict["last_health_check"] = last
     else:
         service_dict["last_health_check"] = None
 
@@ -84,19 +54,15 @@ def attach_last_health_check(service_dict: dict, callsign: str, store) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown."""
-    # Startup: Load services and health check results from disk
-    # Try git backup first (preferred), fall back to pickle
-    services = APRSServices()
-    if not services.git_load():
-        services.load()
+    # Startup: Create RegistryDB instance
+    db_path = getattr(CONF.registry, "db_path", None)
+    if not db_path:
+        db_path = f"{CONF.registry.save_location}/registry.db"
+    app.state.db = RegistryDB(db_path)
 
-    health_store = HealthCheckStore()
-    if not health_store.git_load():
-        health_store.load()
-
-    pending_store = PendingCommandStore()
-    if not pending_store.git_load():
-        pending_store.load()
+    # Set module-level _db on health_checker so it can access the database
+    from aprs_service_registry import health_checker
+    health_checker._db = app.state.db
 
     # Start the persistent APRS-IS consumer for receiving packets
     start_persistent_consumer()
@@ -107,22 +73,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown: Stop scheduler, consumer, and save data
+    # Shutdown: Stop scheduler and consumer, close DB
     stop_scheduler()
     stop_persistent_consumer()
-
-    # Save to both pickle (legacy) and git (backup)
-    services.save()
-    services.git_save("Shutdown: save services")
-    services.git_force_push()
-
-    health_store.save()
-    health_store.git_save("Shutdown: save health checks")
-    health_store.git_force_push()
-
-    pending_store.save()
-    pending_store.git_save("Shutdown: save pending commands")
-    pending_store.git_force_push()
+    app.state.db.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -195,162 +149,23 @@ class PendingCommand(BaseModel):
     submitted_by: str | None = None  # Optional submitter info
 
 
-class PendingCommandStore(objectstore.ObjectStoreMixin, gitstore.GitStoreMixin):
-    """Singleton store for pending command submissions."""
-
-    _instance = None
-    lock = threading.Lock()
-    data: dict = {}  # {id: PendingCommand}
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._init_store()
-            cls._instance.data = {}
-        return cls._instance
-
-    def _save_filename(self):
-        """Override to use different filename."""
-        save_location = CONF.registry.save_location
-        return f"{save_location}/pending_commands.p"
-
-    def _git_filename(self) -> str:
-        return "pending_commands.json"
-
-    def _serialize_for_json(self, obj):
-        """Convert pending commands to JSON-serializable format."""
-        if isinstance(obj, PendingCommand):
-            return {
-                "id": obj.id,
-                "callsign": obj.callsign,
-                "command_name": obj.command_name,
-                "command_description": obj.command_description,
-                "submitted_at": obj.submitted_at.isoformat()
-                if obj.submitted_at
-                else None,
-                "submitted_by": obj.submitted_by,
-            }
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
-        elif hasattr(obj, "model_dump"):
-            return obj.model_dump()
-        elif hasattr(obj, "dict"):
-            return obj.dict()
-        return str(obj)
-
-    @wrapt.synchronized(lock)
-    def add(self, pending: PendingCommand):
-        """Add a pending command submission."""
-        self.data[pending.id] = pending
-        self._save_unlocked()
-        self._git_save_unlocked(
-            f"Add pending command: {pending.command_name} for {pending.callsign}"
-        )
-
-    @wrapt.synchronized(lock)
-    def remove(self, id: str):
-        """Remove a pending command by ID."""
-        if id in self.data:
-            cmd = self.data[id]
-            del self.data[id]
-            self._save_unlocked()
-            self._git_save_unlocked(
-                f"Remove pending command: {cmd.command_name} for {cmd.callsign}"
-            )
-
-    @wrapt.synchronized(lock)
-    def get(self, id: str) -> PendingCommand | None:
-        """Get a pending command by ID."""
-        return self.data.get(id)
-
-    @wrapt.synchronized(lock)
-    def get_all(self) -> dict:
-        """Get all pending commands."""
-        return dict(self.data)
-
-    @wrapt.synchronized(lock)
-    def get_by_callsign(self, callsign: str) -> list[PendingCommand]:
-        """Get all pending commands for a specific service."""
-        return [p for p in self.data.values() if p.callsign.upper() == callsign.upper()]
-
-
-class APRSServices(objectstore.ObjectStoreMixin, gitstore.GitStoreMixin):
-    _instance = None
-    lock = threading.Lock()
-    data: dict = {}
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._init_store()
-            cls._instance.data = {}
-        return cls._instance
-
-    def _git_filename(self) -> str:
-        return "services.json"
-
-    def _serialize_for_json(self, obj):
-        """Convert service objects to JSON-serializable format."""
-        if hasattr(obj, "model_dump"):
-            return obj.model_dump()
-        elif hasattr(obj, "dict"):
-            return obj.dict()
-        elif hasattr(obj, "__dict__"):
-            return obj.__dict__
-        return str(obj)
-
-    @wrapt.synchronized(lock)
-    def __getitem__(self, callsign):
-        return self.data[callsign]
-
-    @wrapt.synchronized(lock)
-    def add(self, callsign, data: registryRequest):
-        """Add a service to the registry.
-
-        Note: This method does NOT persist to disk. Use add_and_persist
-        if you need automatic persistence.
-        """
-        self.data[callsign] = data
-
-    @wrapt.synchronized(lock)
-    def add_and_persist(self, callsign, data: registryRequest):
-        """Add a service to the registry and persist to disk.
-
-        This is the preferred method for recording service changes
-        as it ensures data is saved immediately.
-        """
-        self.data[callsign] = data
-        # Call _save_unlocked to avoid deadlock (we already hold the lock)
-        self._save_unlocked()
-        # Also save to git backup
-        self._git_save_unlocked(f"Add/update service: {callsign}")
-
-    @wrapt.synchronized(lock)
-    def remove(self, callsign):
-        if callsign in self.data:
-            del self.data[callsign]
-
-
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def get(request: Request):
     """Render the card-based view of services."""
-    services = APRSServices()
-    all_services = services.get_all()
-    store = HealthCheckStore()
+    db: RegistryDB = request.app.state.db
 
     # Filter for website: show active, pending and down, hide deleted
+    all_services = db.get_all_services(status_filter={"active", "pending", "down"})
+
     # Build health check info (all results for heatmap)
     filtered_services = {}
     health_results = {}
 
-    for callsign, service in all_services.items():
-        service_dict = service_to_dict(service)
-        status = service_dict["status"]
-
-        if status in ("active", "pending", "down"):
-            filtered_services[callsign] = service
-            # Get all health check results for heatmap
-            health_results[callsign] = store.get_results(callsign)
+    for service in all_services:
+        callsign = service["callsign"]
+        filtered_services[callsign] = service
+        # Get all health check results for heatmap
+        health_results[callsign] = db.get_health_checks(callsign)
 
     # Sort services alphabetically by callsign
     sorted_services = dict(
@@ -372,21 +187,18 @@ async def get(request: Request):
 @app.get("/services", response_class=HTMLResponse, include_in_schema=False)
 async def services_page(request: Request):
     """Render the table view of services (moved from index)."""
-    services = APRSServices()
-    all_services = services.get_all()
-    store = HealthCheckStore()
+    db: RegistryDB = request.app.state.db
 
     # Filter for website: show active, pending and down, hide deleted
+    all_services = db.get_all_services(status_filter={"active", "pending", "down"})
+
     filtered_services = {}
     health_checks = {}
 
-    for callsign, service in all_services.items():
-        service_dict = service_to_dict(service)
-        status = service_dict["status"]
-
-        if status in ("active", "pending", "down"):
-            filtered_services[callsign] = service
-            health_checks[callsign] = store.get_last_result(callsign)
+    for service in all_services:
+        callsign = service["callsign"]
+        filtered_services[callsign] = service
+        health_checks[callsign] = db.get_last_health_check(callsign)
 
     # Sort services alphabetically by callsign
     sorted_services = dict(
@@ -460,52 +272,46 @@ async def faq_page(request: Request):
 async def registry(request: Request, data: registryRequest):
     """Register a service with the registry and/or update."""
     LOG.info(f"registry: {data}")
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = data.callsign.upper()
 
-    # Create a new model instance with uppercased callsign
-    # Use dict() for Pydantic v1 compatibility, model_dump() for v2
+    # Build the service data dict from the request
     try:
         request_dict = data.model_dump()
     except AttributeError:
         request_dict = data.dict()
     request_dict["callsign"] = callsign_upper
 
-    # Preserve existing health_check_command and status if not provided in request
-    # This prevents re-registration from overwriting admin-set values
-    if callsign_upper in services.data:
-        existing = services[callsign_upper]
-        try:
-            existing_dict = existing.model_dump()
-        except AttributeError:
-            existing_dict = existing.dict()
+    # Convert commands from Pydantic models to dicts
+    request_dict["commands"] = [
+        {"name": c["name"], "description": c["description"]}
+        for c in request_dict.get("commands", [])
+    ]
 
+    # Preserve existing admin-managed fields on re-registration
+    existing = db.get_service(callsign_upper)
+    if existing:
         # Preserve health_check_command if not provided in new request
         if request_dict.get("health_check_command") is None:
-            request_dict["health_check_command"] = existing_dict.get(
-                "health_check_command"
-            )
+            request_dict["health_check_command"] = existing.get("health_check_command")
 
         # Preserve status if not explicitly changed (don't let re-registration reset deleted)
         if request_dict.get("status") is None or request_dict.get("status") == "active":
-            existing_status = existing_dict.get("status")
+            existing_status = existing.get("status")
             if existing_status == "deleted":
                 # Don't allow re-registration to un-delete a service
                 request_dict["status"] = "deleted"
 
         # ALWAYS preserve commands - they are admin-managed and services don't know about them
-        request_dict["commands"] = existing_dict.get("commands", [])
+        request_dict["commands"] = existing.get("commands", [])
 
         # ALWAYS preserve featured flag - it's admin-managed
-        request_dict["featured"] = existing_dict.get("featured", False)
+        request_dict["featured"] = existing.get("featured", False)
 
-    request_upper = registryRequest(**request_dict)
-    services.add_and_persist(callsign_upper, request_upper)
-    for service in services:
-        LOG.info(
-            f"{service}: {services[service].description} - {services[service].service_website}",
-        )
-    return json.dumps({"status": "ok"})
+    db.upsert_service(callsign_upper, request_dict, actor=("api", None))
+
+    LOG.info(f"Registered/updated service: {callsign_upper}")
+    return {"status": "ok"}
 
 
 @app.get("/api/v1/registry", response_class=JSONResponse)
@@ -517,9 +323,7 @@ async def get_all_services(
     include_all: bool = False,
 ):
     """Get all registered services, filtered by status."""
-    services = APRSServices()
-    all_services = services.get_all()
-    store = HealthCheckStore()
+    db: RegistryDB = request.app.state.db
 
     # Determine which statuses to include
     # By default, show active, pending, and down (everything except deleted)
@@ -527,14 +331,13 @@ async def get_all_services(
     if include_deleted or include_all:
         allowed_statuses.add("deleted")
 
-    # Convert Pydantic models to dicts and filter by status
-    services_list = []
-    for callsign, service in all_services.items():
-        service_dict = service_to_dict(service)
+    all_services = db.get_all_services(status_filter=allowed_statuses)
 
-        if service_dict["status"] in allowed_statuses:
-            attach_last_health_check(service_dict, callsign, store)
-            services_list.append(service_dict)
+    # Attach health check info
+    services_list = []
+    for service_dict in all_services:
+        attach_last_health_check(service_dict, service_dict["callsign"], db)
+        services_list.append(service_dict)
 
     return {
         "count": len(services_list),
@@ -547,45 +350,41 @@ async def get_all_services(
 @limiter.limit("60/minute")
 async def get_service(request: Request, callsign: str):
     """Get a single service by callsign."""
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-        service_dict = service_to_dict(service)
-        attach_last_health_check(service_dict, callsign_upper, HealthCheckStore())
-        return service_dict
-    except KeyError:
+    service_dict = db.get_service(callsign_upper)
+    if service_dict is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
+
+    attach_last_health_check(service_dict, callsign_upper, db)
+    return service_dict
 
 
 @app.delete("/api/v1/registry/{callsign}", response_class=JSONResponse)
 @limiter.limit("60/minute")
 async def registry_delete(request: Request, callsign: str):
     """Soft delete a service (set status to deleted)."""
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-        service_dict = service_to_dict(service)
-        service_dict["status"] = "deleted"
-        updated_service = registryRequest(**service_dict)
-        services.add_and_persist(callsign_upper, updated_service)
-
-        LOG.info(f"Soft deleted {callsign_upper} from the registry.")
-        return {
-            "status": "ok",
-            "message": f"Service '{callsign_upper}' marked as deleted",
-        }
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
+
+    db.delete_service(callsign_upper, actor=("api", None))
+
+    LOG.info(f"Soft deleted {callsign_upper} from the registry.")
+    return {
+        "status": "ok",
+        "message": f"Service '{callsign_upper}' marked as deleted",
+    }
 
 
 @app.post("/api/v1/health-check/{callsign}", response_class=JSONResponse)
@@ -596,28 +395,28 @@ async def trigger_health_check(request: Request, callsign: str):
     The health check runs in a background thread and returns immediately.
     Results will be available via the /api/v1/registry endpoint.
     """
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        _service = services[callsign_upper]  # Just check it exists
-        LOG.info(f"Manually triggering health check for {callsign_upper}")
-
-        # Run in background thread so we don't block the web server
-        thread = threading.Thread(target=check_service, args=(callsign_upper,))
-        thread.daemon = True
-        thread.start()
-
-        return {
-            "status": "ok",
-            "callsign": callsign_upper,
-            "message": "Health check started in background",
-        }
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
+
+    LOG.info(f"Manually triggering health check for {callsign_upper}")
+
+    # Run in background thread so we don't block the web server
+    thread = threading.Thread(target=check_service, args=(callsign_upper,))
+    thread.daemon = True
+    thread.start()
+
+    return {
+        "status": "ok",
+        "callsign": callsign_upper,
+        "message": "Health check started in background",
+    }
 
 
 @app.post("/api/v1/health-check", response_class=JSONResponse)
@@ -709,7 +508,7 @@ class CommandSubmission(BaseModel):
 @limiter.limit("60/minute")
 async def submit_command(request: Request, callsign: str, data: CommandSubmission):
     """Submit a command suggestion for a service (goes to moderation queue)."""
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
     submitter_callsign = data.submitter_callsign.strip().upper()
 
@@ -728,9 +527,8 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
         )
 
     # Verify service exists
-    try:
-        _service = services[callsign_upper]
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
@@ -752,10 +550,9 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
         )
 
     # Reject if the service already has a command with this name
-    service_dict = service_to_dict(_service)
     existing_names = {
         c["name"].strip().lower()
-        for c in (service_dict.get("commands") or [])
+        for c in (service.get("commands") or [])
         if c.get("name")
     }
     if command_name.lower() in existing_names:
@@ -768,10 +565,14 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
         )
 
     # Reject if an identical command is already pending moderation
-    store = PendingCommandStore()
-    pending_for_service = store.get_by_callsign(callsign_upper)
+    pending_submissions = db.get_pending_submissions()
+    pending_for_service = [
+        p for p in pending_submissions if p.get("callsign", "").upper() == callsign_upper
+    ]
     pending_names = {
-        p.command_name.strip().lower() for p in pending_for_service if p.command_name
+        p["command_name"].strip().lower()
+        for p in pending_for_service
+        if p.get("command_name")
     }
     if command_name.lower() in pending_names:
         raise HTTPException(
@@ -782,27 +583,25 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
             ),
         )
 
-    # Create pending command
-    pending = PendingCommand(
-        id=str(uuid.uuid4()),
-        callsign=callsign_upper,
-        command_name=command_name,
-        command_description=command_description,
-        submitted_at=datetime.now(timezone.utc),
-        submitted_by=submitter_callsign,
-    )
-
-    # Add to pending store
-    store.add(pending)
+    # Create submission
+    submission_id = str(uuid.uuid4())
+    db.submit_command({
+        "id": submission_id,
+        "callsign": callsign_upper,
+        "command_name": command_name,
+        "command_description": command_description,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+        "submitted_by": submitter_callsign,
+    })
 
     LOG.info(
-        f"Command suggestion submitted for {callsign_upper}: '{pending.command_name}' by {submitter_callsign}"
+        f"Command suggestion submitted for {callsign_upper}: '{command_name}' by {submitter_callsign}"
     )
 
     return {
         "status": "ok",
         "message": "Command suggestion submitted for review",
-        "id": pending.id,
+        "id": submission_id,
     }
 
 
@@ -810,19 +609,18 @@ async def submit_command(request: Request, callsign: str, data: CommandSubmissio
 @limiter.limit("60/minute")
 async def get_service_commands(request: Request, callsign: str):
     """Get approved commands for a service."""
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-        service_dict = service_to_dict(service)
-        commands = service_dict.get("commands", [])
-        return {"callsign": callsign_upper, "commands": commands}
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
+
+    commands = service.get("commands", [])
+    return {"callsign": callsign_upper, "commands": commands}
 
 
 # ---- Admin API for Command Moderation ----
@@ -832,86 +630,54 @@ async def get_service_commands(request: Request, callsign: str):
 @limiter.limit("60/minute")
 async def get_pending_commands(request: Request):
     """Get all pending command submissions (admin only)."""
-    store = PendingCommandStore()
-    pending = store.get_all()
-
-    # Convert to list of dicts for JSON response
-    result = []
-    for id, cmd in pending.items():
-        result.append(
-            {
-                "id": cmd.id,
-                "callsign": cmd.callsign,
-                "command_name": cmd.command_name,
-                "command_description": cmd.command_description,
-                "submitted_at": cmd.submitted_at.isoformat(),
-                "submitted_by": cmd.submitted_by,
-            }
-        )
+    db: RegistryDB = request.app.state.db
+    pending = db.get_pending_submissions()
 
     # Sort by submission time (oldest first)
-    result.sort(key=lambda x: x["submitted_at"])
+    pending.sort(key=lambda x: x.get("submitted_at", ""))
 
-    return {"pending_commands": result, "count": len(result)}
+    return {"pending_commands": pending, "count": len(pending)}
 
 
 @app.post("/api/v1/admin/pending-commands/{id}/approve", response_class=JSONResponse)
 @limiter.limit("60/minute")
 async def approve_command(request: Request, id: str):
     """Approve a pending command submission (admin only)."""
-    pending_store = PendingCommandStore()
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
 
     # Get the pending command
-    pending = pending_store.get(id)
+    pending = db.get_submission(id)
     if not pending:
         raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
 
     # Get the service
-    try:
-        service = services[pending.callsign]
-    except KeyError:
-        # Service was deleted, remove the pending command
-        pending_store.remove(id)
+    service = db.get_service(pending["callsign"])
+    if service is None:
+        # Service was deleted, reject the pending command
+        db.reject_submission(id, actor=("admin", None))
         raise HTTPException(
             status_code=404,
-            detail=f"Service '{pending.callsign}' no longer exists",
+            detail=f"Service '{pending['callsign']}' no longer exists",
         )
 
-    # Add command to service
-    service_dict = service_to_dict(service)
-    commands = service_dict.get("commands", [])
-
     # Check for duplicate command name
+    commands = service.get("commands", [])
     existing_names = [c["name"].lower() for c in commands]
-    if pending.command_name.lower() in existing_names:
-        pending_store.remove(id)
+    if pending["command_name"].lower() in existing_names:
+        db.reject_submission(id, actor=("admin", None))
         return {
             "status": "ok",
-            "message": f"Command '{pending.command_name}' already exists, removed from queue",
+            "message": f"Command '{pending['command_name']}' already exists, removed from queue",
         }
 
-    # Add the new command
-    commands.append(
-        {
-            "name": pending.command_name,
-            "description": pending.command_description,
-        }
-    )
-    service_dict["commands"] = commands
+    # Approve - this adds the command to the service automatically
+    db.approve_submission(id, actor=("admin", None))
 
-    # Save updated service
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(pending.callsign, updated_service)
-
-    # Remove from pending
-    pending_store.remove(id)
-
-    LOG.info(f"Approved command '{pending.command_name}' for {pending.callsign}")
+    LOG.info(f"Approved command '{pending['command_name']}' for {pending['callsign']}")
 
     return {
         "status": "ok",
-        "message": f"Command '{pending.command_name}' approved for {pending.callsign}",
+        "message": f"Command '{pending['command_name']}' approved for {pending['callsign']}",
     }
 
 
@@ -919,19 +685,19 @@ async def approve_command(request: Request, id: str):
 @limiter.limit("60/minute")
 async def reject_command(request: Request, id: str):
     """Reject (delete) a pending command submission (admin only)."""
-    pending_store = PendingCommandStore()
+    db: RegistryDB = request.app.state.db
 
-    pending = pending_store.get(id)
+    pending = db.get_submission(id)
     if not pending:
         raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
 
-    pending_store.remove(id)
+    db.reject_submission(id, actor=("admin", None))
 
-    LOG.info(f"Rejected command '{pending.command_name}' for {pending.callsign}")
+    LOG.info(f"Rejected command '{pending['command_name']}' for {pending['callsign']}")
 
     return {
         "status": "ok",
-        "message": f"Command suggestion rejected",
+        "message": "Command suggestion rejected",
     }
 
 
@@ -941,33 +707,26 @@ async def reject_command(request: Request, id: str):
 @limiter.limit("60/minute")
 async def delete_command(request: Request, callsign: str, command_name: str):
     """Delete an approved command from a service (admin only)."""
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
 
-    service_dict = service_to_dict(service)
-    commands = service_dict.get("commands", [])
-
-    # Find and remove the command
-    original_len = len(commands)
-    commands = [c for c in commands if c["name"].lower() != command_name.lower()]
-
-    if len(commands) == original_len:
+    # Check if command exists
+    commands = service.get("commands", [])
+    existing_names = [(c.get("name") or "").lower() for c in commands]
+    if command_name.lower() not in existing_names:
         raise HTTPException(
             status_code=404,
             detail=f"Command '{command_name}' not found for service '{callsign_upper}'",
         )
 
-    service_dict["commands"] = commands
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign_upper, updated_service)
+    db.remove_command(callsign_upper, command_name, actor=("admin", None))
 
     LOG.info(f"Deleted command '{command_name}' from {callsign_upper}")
 
@@ -995,31 +754,28 @@ async def admin_set_commands(
     """Set/replace all commands for a service (admin only)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
 
-    service_dict = service_to_dict(service)
-    service_dict["commands"] = [
+    # Update service with new commands list
+    service["commands"] = [
         {"name": c.name, "description": c.description} for c in commands
     ]
-
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign_upper, updated_service)
+    db.upsert_service(callsign_upper, service, actor=("admin", credentials.username))
 
     LOG.info(f"Admin set {len(commands)} commands for {callsign_upper}")
 
     return {
         "status": "ok",
         "message": f"Set {len(commands)} commands for {callsign_upper}",
-        "commands": service_dict["commands"],
+        "commands": service["commands"],
     }
 
 
@@ -1034,21 +790,18 @@ async def admin_add_command(
     """Add a single command to a service (admin only)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404,
             detail=f"Service '{callsign_upper}' not found",
         )
 
-    service_dict = service_to_dict(service)
-    commands = service_dict.get("commands", [])
-
     # Check for duplicate
+    commands = service.get("commands", [])
     existing_names = [c["name"].lower() for c in commands]
     if command.name.lower() in existing_names:
         raise HTTPException(
@@ -1056,11 +809,8 @@ async def admin_add_command(
             detail=f"Command '{command.name}' already exists for {callsign_upper}",
         )
 
-    commands.append({"name": command.name, "description": command.description})
-    service_dict["commands"] = commands
-
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign_upper, updated_service)
+    db.add_command(callsign_upper, command.name, command.description,
+                   actor=("admin", credentials.username))
 
     LOG.info(f"Admin added command '{command.name}' to {callsign_upper}")
 
@@ -1107,6 +857,7 @@ async def admin_send_bulletins(
 
 
 async def ws_process_balls(msg):
+    import time
     time.sleep(2)
     return {"call": "balls", "data": msg["message"]}
 
@@ -1140,22 +891,15 @@ async def admin_dashboard(
     """Admin dashboard - overview page."""
     verify_admin(credentials)
 
-    services = APRSServices()
-    health_store = HealthCheckStore()
-    pending_store = PendingCommandStore()
+    db: RegistryDB = request.app.state.db
 
     # Gather stats
-    total_services = len(services.data)
-    active_services = sum(
-        1 for s in services.data.values() if getattr(s, "status", "active") == "active"
-    )
-    pending_services = sum(
-        1 for s in services.data.values() if getattr(s, "status", None) == "pending"
-    )
-    down_services = sum(
-        1 for s in services.data.values() if getattr(s, "status", None) == "down"
-    )
-    pending_commands = len(pending_store.data)
+    counts = db.service_count()
+    total_services = counts.get("total", 0)
+    active_services = counts.get("active", 0)
+    pending_services = counts.get("pending", 0)
+    down_services = counts.get("down", 0)
+    pending_commands = len(db.get_pending_submissions())
 
     return templates.TemplateResponse(
         request=request,
@@ -1179,19 +923,16 @@ async def admin_commands(
     """Admin page for moderating command suggestions."""
     verify_admin(credentials)
 
-    pending_store = PendingCommandStore()
-    pending_list = list(pending_store.data.values())
+    db: RegistryDB = request.app.state.db
+    pending_list = db.get_pending_submissions()
 
-    # Sort by submission time (newest first), handling potential data issues
+    # Sort by submission time (newest first)
     try:
         pending_list.sort(
-            key=lambda x: (
-                x.submitted_at if isinstance(x.submitted_at, datetime) else datetime.min
-            ),
+            key=lambda x: x.get("submitted_at", ""),
             reverse=True,
         )
     except (TypeError, AttributeError):
-        # If sorting fails, just use unsorted list
         pass
 
     # Annotate each pending entry with a duplicate status so the admin
@@ -1200,38 +941,36 @@ async def admin_commands(
     #   "exists"    - service already has a command with this name
     #   "duplicate" - another pending entry for the same service has the
     #                 same name (only the first one shows ok)
-    services = APRSServices()
     seen_pending_names: dict[tuple[str, str], str] = {}
     annotated = []
     for cmd in pending_list:
-        callsign = (cmd.callsign or "").upper()
-        name_norm = (cmd.command_name or "").strip().lower()
-        status = "ok"
+        callsign = (cmd.get("callsign") or "").upper()
+        name_norm = (cmd.get("command_name") or "").strip().lower()
+        dup_status = "ok"
 
         # Check existing approved commands on the service
-        try:
-            service = services[callsign]
-            service_dict = service_to_dict(service)
+        service = db.get_service(callsign)
+        if service is None:
+            # Service is gone - mark as exists so admin knows to reject
+            dup_status = "exists"
+        else:
             existing_names = {
                 (c.get("name") or "").strip().lower()
-                for c in (service_dict.get("commands") or [])
+                for c in (service.get("commands") or [])
                 if c.get("name")
             }
             if name_norm and name_norm in existing_names:
-                status = "exists"
-        except KeyError:
-            # Service is gone - mark as exists so admin knows to reject
-            status = "exists"
+                dup_status = "exists"
 
         # Check for duplicates inside the pending queue itself
-        if status == "ok" and name_norm:
+        if dup_status == "ok" and name_norm:
             key = (callsign, name_norm)
             if key in seen_pending_names:
-                status = "duplicate"
+                dup_status = "duplicate"
             else:
-                seen_pending_names[key] = cmd.id
+                seen_pending_names[key] = cmd.get("id", "")
 
-        annotated.append({"cmd": cmd, "dup_status": status})
+        annotated.append({"cmd": cmd, "dup_status": dup_status})
 
     return templates.TemplateResponse(
         request=request,
@@ -1252,53 +991,42 @@ async def admin_approve_command(
     """Approve a pending command (admin web interface)."""
     verify_admin(credentials)
 
-    pending_store = PendingCommandStore()
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
 
-    pending = pending_store.get(id)
+    pending = db.get_submission(id)
     if not pending:
         raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
 
     # Get existing service
-    try:
-        service = services[pending.callsign]
-    except KeyError:
-        # Service is gone - just drop the pending entry
-        pending_store.remove(id)
+    service = db.get_service(pending["callsign"])
+    if service is None:
+        # Service is gone - just reject the pending entry
+        db.reject_submission(id, actor=("admin", credentials.username))
         LOG.info(
-            f"Admin approve: service '{pending.callsign}' missing, "
-            f"discarded pending command '{pending.command_name}'"
+            f"Admin approve: service '{pending['callsign']}' missing, "
+            f"discarded pending command '{pending['command_name']}'"
         )
         return RedirectResponse(url="/admin/commands", status_code=303)
 
-    service_dict = service_to_dict(service)
-    commands = service_dict.get("commands", []) or []
+    commands = service.get("commands", []) or []
 
-    # Skip duplicates - remove the pending entry but don't add another copy
-    pending_name = (pending.command_name or "").strip().lower()
+    # Skip duplicates - reject the pending entry but don't add another copy
+    pending_name = (pending.get("command_name") or "").strip().lower()
     existing_names = {
         (c.get("name") or "").strip().lower() for c in commands if c.get("name")
     }
     if pending_name and pending_name in existing_names:
-        pending_store.remove(id)
+        db.reject_submission(id, actor=("admin", credentials.username))
         LOG.info(
-            f"Admin approve: '{pending.command_name}' already exists on "
-            f"{pending.callsign}; discarded duplicate suggestion"
+            f"Admin approve: '{pending['command_name']}' already exists on "
+            f"{pending['callsign']}; discarded duplicate suggestion"
         )
         return RedirectResponse(url="/admin/commands", status_code=303)
 
-    commands.append(
-        {"name": pending.command_name, "description": pending.command_description}
-    )
-    service_dict["commands"] = commands
+    # Approve - this adds the command to the service automatically
+    db.approve_submission(id, actor=("admin", credentials.username))
 
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(pending.callsign, updated_service)
-
-    # Remove from pending
-    pending_store.remove(id)
-
-    LOG.info(f"Admin approved command '{pending.command_name}' for {pending.callsign}")
+    LOG.info(f"Admin approved command '{pending['command_name']}' for {pending['callsign']}")
 
     return RedirectResponse(url="/admin/commands", status_code=303)
 
@@ -1312,15 +1040,15 @@ async def admin_reject_command(
     """Reject a pending command (admin web interface)."""
     verify_admin(credentials)
 
-    pending_store = PendingCommandStore()
+    db: RegistryDB = request.app.state.db
 
-    pending = pending_store.get(id)
+    pending = db.get_submission(id)
     if not pending:
         raise HTTPException(status_code=404, detail=f"Pending command '{id}' not found")
 
-    pending_store.remove(id)
+    db.reject_submission(id, actor=("admin", credentials.username))
 
-    LOG.info(f"Admin rejected command '{pending.command_name}' for {pending.callsign}")
+    LOG.info(f"Admin rejected command '{pending['command_name']}' for {pending['callsign']}")
 
     return RedirectResponse(url="/admin/commands", status_code=303)
 
@@ -1333,20 +1061,19 @@ async def admin_services(
     """Admin page for managing services."""
     verify_admin(credentials)
 
-    services = APRSServices()
-    health_store = HealthCheckStore()
+    db: RegistryDB = request.app.state.db
 
     # Build service list with health info
+    all_services = db.get_all_services()
     service_list = []
-    for callsign, service in services.data.items():
-        service_dict = service_to_dict(service)
-        service_dict["callsign"] = callsign
+    for service_dict in all_services:
+        callsign = service_dict["callsign"]
 
         # Add health info
-        last_result = health_store.get_last_result(callsign)
+        last_result = db.get_last_health_check(callsign)
         if last_result:
             service_dict["last_health_check"] = last_result
-            results = health_store.get_results(callsign)
+            results = db.get_health_checks(callsign)
             service_dict["uptime"] = calculate_uptime(results)
         else:
             service_dict["last_health_check"] = None
@@ -1358,8 +1085,7 @@ async def admin_services(
     service_list.sort(key=lambda x: x["callsign"])
 
     # Get pending commands count for sidebar badge
-    pending_store = PendingCommandStore()
-    pending_commands_count = len(pending_store.data)
+    pending_commands_count = len(db.get_pending_submissions())
 
     return templates.TemplateResponse(
         request=request,
@@ -1379,9 +1105,8 @@ async def admin_new_service_form(
     """Admin page for adding a new service."""
     verify_admin(credentials)
 
-    # Get pending commands count for sidebar badge
-    pending_store = PendingCommandStore()
-    pending_commands_count = len(pending_store.data)
+    db: RegistryDB = request.app.state.db
+    pending_commands_count = len(db.get_pending_submissions())
 
     return templates.TemplateResponse(
         request=request,
@@ -1401,13 +1126,12 @@ async def admin_create_service(
     """Create a new service (admin web interface)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     form = await request.form()
 
     callsign = (form.get("callsign") or "").strip().upper()
     if not callsign:
-        pending_store = PendingCommandStore()
-        pending_commands_count = len(pending_store.data)
+        pending_commands_count = len(db.get_pending_submissions())
         return templates.TemplateResponse(
             request=request,
             name="admin/service_new.html",
@@ -1418,9 +1142,9 @@ async def admin_create_service(
         )
 
     # Check if service already exists
-    if callsign in services.data:
-        pending_store = PendingCommandStore()
-        pending_commands_count = len(pending_store.data)
+    existing = db.get_service(callsign)
+    if existing is not None:
+        pending_commands_count = len(db.get_pending_submissions())
         return templates.TemplateResponse(
             request=request,
             name="admin/service_new.html",
@@ -1443,8 +1167,7 @@ async def admin_create_service(
         "commands": [],
     }
 
-    new_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign, new_service)
+    db.upsert_service(callsign, service_dict, actor=("admin", credentials.username))
 
     LOG.info(f"Admin created new service {callsign}")
 
@@ -1460,27 +1183,21 @@ async def admin_service_detail(
     """Admin page for viewing/editing a single service."""
     verify_admin(credentials)
 
-    services = APRSServices()
-    health_store = HealthCheckStore()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service_dict = db.get_service(callsign_upper)
+    if service_dict is None:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
 
-    service_dict = service_to_dict(service)
-    service_dict["callsign"] = callsign_upper
-
     # Get health check history
-    health_results = health_store.get_results(callsign_upper)[:50]
+    health_results = db.get_health_checks(callsign_upper, limit=50)
     uptime = calculate_uptime(health_results)
 
     # Get pending commands count for sidebar badge
-    pending_store = PendingCommandStore()
-    pending_commands_count = len(pending_store.data)
+    pending_commands_count = len(db.get_pending_submissions())
 
     return templates.TemplateResponse(
         request=request,
@@ -1503,12 +1220,11 @@ async def admin_edit_service(
     """Update a service (admin web interface)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service_dict = db.get_service(callsign_upper)
+    if service_dict is None:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
@@ -1516,7 +1232,6 @@ async def admin_edit_service(
     # Get form data
     form = await request.form()
 
-    service_dict = service_to_dict(service)
     service_dict["description"] = form.get(
         "description", service_dict.get("description", "")
     )
@@ -1537,8 +1252,7 @@ async def admin_edit_service(
     # Featured flag - checkbox sends "true" when checked, absent when unchecked
     service_dict["featured"] = form.get("featured") == "true"
 
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign_upper, updated_service)
+    db.upsert_service(callsign_upper, service_dict, actor=("admin", credentials.username))
 
     LOG.info(f"Admin updated service {callsign_upper}")
 
@@ -1554,21 +1268,16 @@ async def admin_delete_service(
     """Soft delete a service - mark status as 'deleted' (admin web interface)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
 
-    # Convert to dict, update status, convert back
-    service_dict = service_to_dict(service)
-    service_dict["status"] = "deleted"
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign_upper, updated_service)
+    db.delete_service(callsign_upper, actor=("admin", credentials.username))
 
     LOG.info(f"Admin soft-deleted service {callsign_upper}")
 
@@ -1584,12 +1293,11 @@ async def admin_trigger_health_check(
     """Trigger a health check for a service (admin web interface)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        services[callsign_upper]  # Verify service exists
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
@@ -1617,40 +1325,28 @@ async def admin_delete_command(
     """Delete a single command from a service (admin web interface)."""
     verify_admin(credentials)
 
-    services = APRSServices()
+    db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    try:
-        service = services[callsign_upper]
-    except KeyError:
+    service = db.get_service(callsign_upper)
+    if service is None:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
 
-    service_dict = service_to_dict(service)
-    commands = service_dict.get("commands", []) or []
+    commands = service.get("commands", []) or []
 
-    # Remove only the first matching command (case-insensitive). If
-    # duplicates exist, repeated calls are required to remove them all -
-    # this matches the per-row delete UI behavior.
+    # Check command exists
     target = command_name.lower()
-    removed = False
-    new_commands = []
-    for c in commands:
-        if not removed and (c.get("name") or "").lower() == target:
-            removed = True
-            continue
-        new_commands.append(c)
+    found = any((c.get("name") or "").lower() == target for c in commands)
 
-    if not removed:
+    if not found:
         raise HTTPException(
             status_code=404,
             detail=f"Command '{command_name}' not found for service '{callsign_upper}'",
         )
 
-    service_dict["commands"] = new_commands
-    updated_service = registryRequest(**service_dict)
-    services.add_and_persist(callsign_upper, updated_service)
+    db.remove_command(callsign_upper, command_name, actor=("admin", credentials.username))
 
     LOG.info(f"Admin deleted command '{command_name}' from {callsign_upper}")
 

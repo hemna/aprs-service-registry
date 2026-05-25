@@ -20,6 +20,9 @@ MAX_RESULTS_PER_SERVICE = 24
 SECONDS_PER_HOUR = 3600
 CONSECUTIVE_FAILURES_FOR_DOWN = 3  # Consecutive failures before marking as down
 
+# Module-level DB reference, set by main.py lifespan
+_db = None
+
 
 def calculate_uptime(results: list) -> str:
     """Calculate uptime percentage from health check results.
@@ -574,29 +577,25 @@ def check_service(callsign: str) -> None:
     - On FAILURE: active -> pending
     - On FAILURE (3 consecutive): pending -> down
     """
-    from aprs_service_registry.main import APRSServices, registryRequest
+    global _db
+    if _db is None:
+        LOG.warning("DB not initialized, skipping health check")
+        return
 
-    services = APRSServices()
-    store = HealthCheckStore()
-
-    try:
-        service = services[callsign.upper()]
-    except KeyError:
+    service = _db.get_service(callsign.upper())
+    if service is None:
         LOG.warning(f"Service {callsign} not found, skipping health check")
         return
 
-    # Get service dict for status check
-    service_dict = _service_to_dict(service)
-
     # Skip deleted services
-    current_status = service_dict.get("status", "active")
+    current_status = service.get("status", "active")
     if current_status == "deleted":
         LOG.debug(f"Skipping health check for deleted service {callsign}")
         return
 
     # Skip services without health_check_command
     # Get health check command, defaulting to 'ping'
-    health_check_command = service_dict.get("health_check_command") or "ping"
+    health_check_command = service.get("health_check_command") or "ping"
 
     LOG.info(f"Running health check for {callsign}: sending '{health_check_command}'")
 
@@ -663,11 +662,11 @@ def check_service(callsign: str) -> None:
         elif current_status == "pending":
             # Check if we've had 3+ consecutive failures (including this one)
             # Look at historical results to count consecutive failures
-            results = store.get_results(callsign.upper())
+            results = _db.get_health_checks(callsign.upper(), limit=10)
             consecutive_failures = 1  # Count current failure
             if results:
                 for r in results:  # Most recent first
-                    if r.success:
+                    if r["success"]:
                         break  # Stop counting on first success
                     consecutive_failures += 1
 
@@ -678,13 +677,19 @@ def check_service(callsign: str) -> None:
                     f"({consecutive_failures} consecutive failures)"
                 )
 
-    store.add_and_persist_result(callsign, result)
+    _db.add_health_check(callsign, {
+        "timestamp": result.timestamp.isoformat() if result.timestamp else None,
+        "success": result.success,
+        "response_time_ms": result.response_time_ms,
+        "response_text": result.response_text,
+        "error": result.error,
+    })
 
     # Update service status if changed
     if new_status != current_status:
-        service_dict["status"] = new_status
-        updated_service = registryRequest(**service_dict)
-        services.add_and_persist(callsign.upper(), updated_service)
+        _db.update_service_status(
+            callsign.upper(), new_status, actor=("scheduler", None)
+        )
 
 
 def calculate_stagger_interval(num_services: int) -> int | None:
@@ -719,21 +724,14 @@ def get_checkable_services() -> list[str]:
     All active/down services are checked using their health_check_command
     or 'ping' as the default.
     """
-    from aprs_service_registry.main import APRSServices
+    global _db
+    if _db is None:
+        return []
 
-    services = APRSServices()
-    checkable = []
-
-    for callsign in services:
-        service = services[callsign]
-        service_dict = _service_to_dict(service)
-
-        status = service_dict.get("status", "active")
-
-        if status != "deleted":
-            checkable.append(callsign)
-
-    return checkable
+    services = _db.get_all_services(
+        status_filter={"active", "pending", "down"}
+    )
+    return [s["callsign"] for s in services]
 
 
 def send_bulletins() -> None:
@@ -754,16 +752,17 @@ def send_bulletins() -> None:
         from aprsd.packets import BulletinPacket
         from aprsd.threads import tx
 
-        from aprs_service_registry.main import APRSServices
-
         from_call = cfg.CONF.callsign
         if not from_call:
             LOG.error("No callsign configured for bulletin send")
             return
 
         # Get service count for {count} placeholder
-        services = APRSServices()
-        service_count = len(services)
+        global _db
+        service_count = 0
+        if _db:
+            counts = _db.service_count()
+            service_count = counts.get("total", 0)
 
         messages = CONF.registry.bulletin_messages
         for i, message_template in enumerate(messages):
