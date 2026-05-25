@@ -5,12 +5,9 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-import wrapt
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from loguru import logger
 from oslo_config import cfg
-
-from aprs_service_registry import gitstore, objectstore
 
 
 LOG = logger
@@ -211,92 +208,6 @@ class HealthCheckResult:
     response_time_ms: int | None  # None if timeout
     response_text: str | None  # First 100 chars of response
     error: str | None  # Error message if failed
-
-
-class HealthCheckStore(objectstore.ObjectStoreMixin, gitstore.GitStoreMixin):
-    """Singleton store for health check results."""
-
-    _instance = None
-    lock = threading.Lock()
-    data: dict = {}  # {callsign: [HealthCheckResult, ...]}
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._init_store()
-            cls._instance.data = {}
-        return cls._instance
-
-    def _save_filename(self):
-        """Override to use different filename than services."""
-        save_location = CONF.registry.save_location
-        return f"{save_location}/healthchecks.p"
-
-    def _git_filename(self) -> str:
-        return "healthchecks.json"
-
-    def _serialize_for_json(self, obj):
-        """Convert health check results to JSON-serializable format."""
-        if isinstance(obj, HealthCheckResult):
-            return {
-                "timestamp": obj.timestamp.isoformat() if obj.timestamp else None,
-                "success": obj.success,
-                "response_time_ms": obj.response_time_ms,
-                "response_text": obj.response_text,
-                "error": obj.error,
-            }
-        elif isinstance(obj, datetime):
-            return obj.isoformat()
-        elif hasattr(obj, "__dict__"):
-            return obj.__dict__
-        return str(obj)
-
-    @wrapt.synchronized(lock)
-    def add_result(self, callsign: str, result: HealthCheckResult):
-        """Add a health check result for a service, keeping only last 3.
-
-        Note: This method does NOT persist to disk. Use add_and_persist_result
-        if you need automatic persistence.
-        """
-        callsign_upper = callsign.upper()
-        if callsign_upper not in self.data:
-            self.data[callsign_upper] = []
-
-        # Prepend new result (most recent first)
-        self.data[callsign_upper].insert(0, result)
-
-        # Keep only last 3
-        self.data[callsign_upper] = self.data[callsign_upper][:MAX_RESULTS_PER_SERVICE]
-
-    @wrapt.synchronized(lock)
-    def add_and_persist_result(self, callsign: str, result: HealthCheckResult):
-        """Add a health check result and persist to disk.
-
-        This is the preferred method for recording health check results
-        as it ensures data is saved immediately.
-        """
-        callsign_upper = callsign.upper()
-        if callsign_upper not in self.data:
-            self.data[callsign_upper] = []
-
-        # Prepend new result (most recent first)
-        self.data[callsign_upper].insert(0, result)
-
-        # Keep only last 3
-        self.data[callsign_upper] = self.data[callsign_upper][:MAX_RESULTS_PER_SERVICE]
-
-        # Persist to disk (use unlocked version since we hold the lock)
-        self._save_unlocked()
-
-    @wrapt.synchronized(lock)
-    def get_results(self, callsign: str) -> list[HealthCheckResult]:
-        """Get all health check results for a service."""
-        return self.data.get(callsign.upper(), [])
-
-    def get_last_result(self, callsign: str) -> HealthCheckResult | None:
-        """Get the most recent health check result for a service."""
-        results = self.get_results(callsign)
-        return results[0] if results else None
 
 
 def _initialize_aprsd() -> bool:
@@ -704,17 +615,6 @@ def calculate_stagger_interval(num_services: int) -> int | None:
     if num_services <= 0:
         return None
     return SECONDS_PER_HOUR // num_services
-
-
-def _service_to_dict(service) -> dict:
-    """Convert a service model to a dictionary.
-
-    Handles both Pydantic v1 (.dict()) and v2 (.model_dump()) APIs.
-    """
-    try:
-        return service.model_dump()
-    except AttributeError:
-        return service.dict()
 
 
 def get_checkable_services() -> list[str]:
