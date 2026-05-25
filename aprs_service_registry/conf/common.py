@@ -78,25 +78,31 @@ registry_opts = [
         default="",
         help="Password for admin interface. If empty, admin is disabled.",
     ),
+    cfg.StrOpt(
+        "db_path",
+        default="",
+        help="Path to SQLite database file. If set, uses SQLite as the storage backend. "
+        "Example: /config/registry.db",
+    ),
     cfg.BoolOpt(
         "git_backup_enabled",
         default=False,
-        help="Enable git-backed JSON storage for data versioning and backup.",
+        help="(Deprecated) Enable git-backed JSON storage. Use db_path instead.",
     ),
     cfg.StrOpt(
         "git_backup_path",
         default=f"{DEFAULT_CONFIG_DIR}/backup",
-        help="Path to the git repository for backups.",
+        help="(Deprecated) Path to the git repository for backups.",
     ),
     cfg.StrOpt(
         "git_backup_remote",
         default="",
-        help="Git remote URL (e.g., GitHub) for offsite backup. Leave empty to disable push.",
+        help="(Deprecated) Git remote URL for offsite backup.",
     ),
     cfg.IntOpt(
         "git_backup_push_interval",
         default=60,
-        help="Minutes between pushes to remote. 0 = push on every commit.",
+        help="(Deprecated) Minutes between pushes to remote.",
     ),
     cfg.BoolOpt(
         "bulletin_enabled",
