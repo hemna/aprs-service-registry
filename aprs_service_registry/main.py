@@ -1284,6 +1284,37 @@ async def admin_delete_service(
     return RedirectResponse(url="/admin/services", status_code=303)
 
 
+@app.post("/admin/services/{callsign}/undelete", response_class=HTMLResponse)
+async def admin_undelete_service(
+    request: Request,
+    callsign: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Restore a soft-deleted service, setting status back to 'active'."""
+    verify_admin(credentials)
+
+    db: RegistryDB = request.app.state.db
+    callsign_upper = callsign.upper()
+
+    service = db.get_service(callsign_upper)
+    if service is None:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+    if service.get("status") != "deleted":
+        raise HTTPException(
+            status_code=400, detail=f"Service '{callsign_upper}' is not deleted"
+        )
+
+    db.update_service_status(
+        callsign_upper, "active", actor=("admin", credentials.username)
+    )
+
+    LOG.info(f"Admin restored (undeleted) service {callsign_upper}")
+
+    return RedirectResponse(url=f"/admin/services/{callsign_upper}", status_code=303)
+
+
 @app.post("/admin/services/{callsign}/health-check", response_class=HTMLResponse)
 async def admin_trigger_health_check(
     request: Request,

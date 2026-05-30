@@ -47,6 +47,8 @@
           <span class="health-badge" style="background: rgba(255, 193, 7, 0.1); color: #ffc107;">Pending</span>
         {% elif service.status == 'down' %}
           <span class="health-badge failure">Down</span>
+        {% elif service.status == 'deleted' %}
+          <span class="health-badge" style="background: rgba(108, 117, 125, 0.1); color: #6c757d;">Deleted</span>
         {% else %}
           <span class="health-badge">{{ service.status }}</span>
         {% endif %}

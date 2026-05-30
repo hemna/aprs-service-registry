@@ -256,6 +256,36 @@ def migrate_to_sqlite(ctx, db_path):
     click.echo(f"  db_path = {target_db}")
 
 
+@cli.command()
+@cli_helper.add_options(cli_helper.common_options)
+@click.argument("callsign")
+@click.pass_context
+@cli_helper.process_standard_options
+def undelete(ctx, callsign):
+    """Restore a soft-deleted service back to active status."""
+    from aprs_service_registry.db import RegistryDB
+
+    db_path = CONF.registry.db_path or f"{CONF.registry.save_location}/registry.db"
+    db = RegistryDB(db_path)
+
+    callsign_upper = callsign.upper()
+    service = db.get_service(callsign_upper)
+
+    if service is None:
+        click.secho(f"  Service '{callsign_upper}' not found.", fg="red")
+        return
+
+    if service.get("status") != "deleted":
+        click.secho(
+            f"  Service '{callsign_upper}' is not deleted (status: {service['status']}).",
+            fg="yellow",
+        )
+        return
+
+    db.update_service_status(callsign_upper, "active", actor=("system", "cli-undelete"))
+    click.secho(f"  {callsign_upper} restored to active.", fg="green")
+
+
 def main():
     cli(auto_envvar_prefix="APRS_SERVICE_REGISTRY")
 
