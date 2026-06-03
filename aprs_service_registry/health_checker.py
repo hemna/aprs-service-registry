@@ -98,6 +98,43 @@ def clear_old_responses(max_age_seconds: int = 300) -> None:
             del _received_responses[k]
 
 
+def get_aprs_connection_status() -> dict:
+    """Get the current APRS-IS connection status.
+
+    Returns a dict with:
+        connected: bool - whether APRS-IS client is alive
+        consumer_running: bool - whether the consumer thread is active
+        health_checks_enabled: bool - whether health checks are configured
+        initialized: bool - whether APRSD client has been initialized
+    """
+    global _aprsd_initialized, _consumer_thread, _consumer_running
+
+    status = {
+        "health_checks_enabled": CONF.registry.health_check_enabled,
+        "initialized": _aprsd_initialized,
+        "consumer_running": (
+            _consumer_thread is not None and _consumer_thread.is_alive()
+        ),
+        "connected": False,
+    }
+
+    if not CONF.registry.health_check_enabled:
+        # If health checks are disabled, report healthy (not applicable)
+        status["connected"] = True
+        return status
+
+    if _aprsd_initialized:
+        try:
+            from aprsd.client.client import APRSDClient
+
+            client = APRSDClient()
+            status["connected"] = client.is_alive
+        except Exception:
+            status["connected"] = False
+
+    return status
+
+
 def _global_rx_callback(packet):
     """Global callback for ALL received packets.
 

@@ -45,9 +45,9 @@ USER app
 
 EXPOSE 80
 
-# Healthcheck: HTTP GET /
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget -q -O- http://127.0.0.1:80/ || exit 1
+# Healthcheck: verify web server AND APRS-IS connection
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+    CMD wget -q -O- http://127.0.0.1:80/api/v1/health || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["aprs-service-registry", "server", "-c", "/app/config/registry.conf"]

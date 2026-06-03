@@ -24,6 +24,7 @@ from aprs_service_registry.db import RegistryDB
 from aprs_service_registry.health_checker import (
     calculate_uptime,
     check_service,
+    get_aprs_connection_status,
     get_checkable_services,
     setup_scheduler,
     start_persistent_consumer,
@@ -147,6 +148,38 @@ class PendingCommand(BaseModel):
     command_description: str
     submitted_at: datetime
     submitted_by: str | None = None  # Optional submitter info
+
+
+@app.get("/api/v1/health", response_class=JSONResponse)
+async def health_check_endpoint():
+    """System health check endpoint.
+
+    Returns 200 if the service is healthy (web server up AND APRS-IS connected).
+    Returns 503 if APRS-IS connection is down.
+
+    Used by Docker HEALTHCHECK to detect when the service needs a restart.
+    """
+    aprs_status = get_aprs_connection_status()
+
+    healthy = True
+    checks = {
+        "web_server": "ok",
+        "aprs_is": "ok" if aprs_status["connected"] else "disconnected",
+        "consumer_thread": "running" if aprs_status["consumer_running"] else "stopped",
+    }
+
+    # If health checks are enabled but APRS-IS is disconnected, report unhealthy
+    if aprs_status["health_checks_enabled"] and not aprs_status["connected"]:
+        healthy = False
+
+    status_code = 200 if healthy else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "healthy" if healthy else "unhealthy",
+            "checks": checks,
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
