@@ -128,6 +128,11 @@ def _run_persistent_consumer():
 
     This function runs in a dedicated thread and continuously reads
     from APRS-IS, calling _global_rx_callback for each packet.
+
+    Mirrors APRSD's own APRSDRXThread recovery pattern:
+    - Check client.is_alive before calling consumer()
+    - On connection errors, call client.reset() to force reconnect
+    - Back off 5 seconds before retrying to avoid tight error loops
     """
     global _consumer_running
 
@@ -138,6 +143,15 @@ def _run_persistent_consumer():
         LOG.info("Starting persistent APRS-IS consumer thread")
 
         while _consumer_running:
+            # Check liveness before calling consumer (mirrors APRSDRXThread)
+            if not client.is_alive:
+                LOG.warning(
+                    "APRS-IS client not alive, resetting connection..."
+                )
+                client.reset()
+                time.sleep(5)
+                continue
+
             try:
                 # consumer() blocks and calls callback for each packet
                 # We use a short internal timeout to check _consumer_running periodically
@@ -147,8 +161,9 @@ def _run_persistent_consumer():
                 pass
             except Exception as e:
                 if _consumer_running:
-                    LOG.warning(f"Consumer error (will retry): {e}")
-                    time.sleep(1)  # Brief pause before retry
+                    LOG.warning(f"Consumer error, resetting connection: {e}")
+                    client.reset()
+                    time.sleep(5)
 
     except Exception as e:
         LOG.error(f"Persistent consumer thread failed: {e}")
