@@ -31,8 +31,8 @@
       <td>{{ cmd.command_description }}</td>
       <td>{{ cmd.submitted_by or '—' }}</td>
       <td>
-        <span title="{{ cmd.submitted_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC">
-          {{ cmd.submitted_at.strftime('%Y-%m-%d %H:%M') }}
+        <span title="{{ cmd.submitted_at }} UTC">
+          {{ cmd.submitted_at[:16] if cmd.submitted_at else '—' }}
         </span>
       </td>
       <td>
