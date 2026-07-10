@@ -104,6 +104,25 @@
       <div class="admin-card-header">Actions</div>
       <div class="admin-card-body">
         <div class="admin-actions" style="flex-direction: column; align-items: stretch;">
+          <!-- Featured Toggle -->
+          <form action="/admin/services/{{ service.callsign }}/toggle-featured" method="POST">
+            {% if service.featured %}
+            <button type="submit" class="admin-btn" style="width: 100%; background: rgba(255, 215, 0, 0.15); color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.3);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              Remove Featured
+            </button>
+            {% else %}
+            <button type="submit" class="admin-btn admin-btn-secondary" style="width: 100%;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              Set as Featured
+            </button>
+            {% endif %}
+          </form>
+
           {% if service.status == 'deleted' %}
           <form action="/admin/services/{{ service.callsign }}/undelete" method="POST">
             <button type="submit" class="admin-btn admin-btn-success" style="width: 100%;">

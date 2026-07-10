@@ -320,6 +320,48 @@ class RegistryDB:
                 "status_change", {"old": old["status"], "new": new_status}
             )
 
+    def set_featured(self, callsign: str, featured: bool,
+                     actor: tuple[str, str | None] = ("admin", None)):
+        """Set or unset the featured flag on a service."""
+        callsign_upper = callsign.upper()
+        with self._connect() as conn:
+            old = conn.execute(
+                "SELECT featured FROM services WHERE callsign = ?", (callsign_upper,)
+            ).fetchone()
+            if old is None:
+                LOG.warning(f"set_featured called for nonexistent service: {callsign_upper}")
+                return
+            conn.execute(
+                "UPDATE services SET featured = ?, updated_at = ? WHERE callsign = ?",
+                (int(featured), self._now(), callsign_upper),
+            )
+            self._audit(
+                conn, actor[0], actor[1], "service", callsign_upper,
+                "set_featured", {"old": bool(old["featured"]), "new": featured}
+            )
+
+    def toggle_featured(self, callsign: str,
+                        actor: tuple[str, str | None] = ("admin", None)) -> bool | None:
+        """Atomically toggle the featured flag. Returns new value, or None if not found."""
+        callsign_upper = callsign.upper()
+        with self._connect() as conn:
+            old = conn.execute(
+                "SELECT featured FROM services WHERE callsign = ?", (callsign_upper,)
+            ).fetchone()
+            if old is None:
+                LOG.warning(f"toggle_featured called for nonexistent service: {callsign_upper}")
+                return None
+            new_val = not bool(old["featured"])
+            conn.execute(
+                "UPDATE services SET featured = ?, updated_at = ? WHERE callsign = ?",
+                (int(new_val), self._now(), callsign_upper),
+            )
+            self._audit(
+                conn, actor[0], actor[1], "service", callsign_upper,
+                "set_featured", {"old": bool(old["featured"]), "new": new_val}
+            )
+            return new_val
+
     def delete_service(self, callsign: str,
                        actor: tuple[str, str | None] = ("admin", None)):
         """Soft delete a service (set status to 'deleted')."""

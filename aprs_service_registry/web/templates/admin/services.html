@@ -82,6 +82,17 @@
         <a href="/admin/services/{{ service.callsign }}" class="admin-btn admin-btn-secondary admin-btn-sm">
           View
         </a>
+        <form action="/admin/services/{{ service.callsign }}/toggle-featured" method="POST" style="display: inline;">
+          {% if service.featured %}
+          <button type="submit" class="admin-btn admin-btn-sm" style="background: rgba(255, 215, 0, 0.15); color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.3);" title="Unfeature">
+            &starf; Featured
+          </button>
+          {% else %}
+          <button type="submit" class="admin-btn admin-btn-sm" style="background: rgba(108, 117, 125, 0.1); color: #6c757d; border: 1px solid rgba(108, 117, 125, 0.3);" title="Set as Featured">
+            &star; Feature
+          </button>
+          {% endif %}
+        </form>
       </td>
     </tr>
     {% endfor %}

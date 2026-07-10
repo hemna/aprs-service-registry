@@ -366,3 +366,66 @@ class TestAdminCreateService:
         response = client.get("/admin/services/new", auth=self._auth())
         assert response.status_code == 200
         assert "Add New Service" in response.text
+
+
+class TestAdminToggleFeatured:
+    """Tests for the admin toggle-featured endpoint."""
+
+    def setup_method(self):
+        _reset_db()
+        from oslo_config import cfg
+        cfg.CONF.set_override("admin_password", "testpass", group="registry")
+
+    def teardown_method(self):
+        from oslo_config import cfg
+        cfg.CONF.set_override("admin_password", "", group="registry")
+
+    def _auth(self):
+        return ("admin", "testpass")
+
+    def test_toggle_featured_on(self):
+        """Toggle featured on a non-featured service."""
+        _db().upsert_service("WXBOT", {"featured": False})
+
+        response = client.post(
+            "/admin/services/WXBOT/toggle-featured",
+            auth=self._auth(),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        svc = _db().get_service("WXBOT")
+        assert svc["featured"] is True
+
+    def test_toggle_featured_off(self):
+        """Toggle featured off a featured service."""
+        _db().upsert_service("WXBOT", {"featured": True})
+
+        response = client.post(
+            "/admin/services/WXBOT/toggle-featured",
+            auth=self._auth(),
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+        svc = _db().get_service("WXBOT")
+        assert svc["featured"] is False
+
+    def test_toggle_featured_not_found(self):
+        """Toggle on nonexistent service returns 404."""
+        response = client.post(
+            "/admin/services/NOPE/toggle-featured",
+            auth=self._auth(),
+            follow_redirects=False,
+        )
+        assert response.status_code == 404
+
+    def test_toggle_featured_unauthenticated(self):
+        """Unauthenticated toggle is rejected."""
+        _db().upsert_service("WXBOT", {"featured": False})
+
+        response = client.post(
+            "/admin/services/WXBOT/toggle-featured",
+            follow_redirects=False,
+        )
+        assert response.status_code == 401

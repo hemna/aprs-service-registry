@@ -1292,6 +1292,31 @@ async def admin_edit_service(
     return RedirectResponse(url=f"/admin/services/{callsign_upper}", status_code=303)
 
 
+@app.post("/admin/services/{callsign}/toggle-featured", response_class=HTMLResponse)
+async def admin_toggle_featured(
+    request: Request,
+    callsign: str,
+    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+):
+    """Toggle the featured flag on a service (admin web interface)."""
+    verify_admin(credentials)
+
+    db: RegistryDB = request.app.state.db
+    callsign_upper = callsign.upper()
+
+    new_featured = db.toggle_featured(callsign_upper, actor=("admin", credentials.username))
+    if new_featured is None:
+        raise HTTPException(
+            status_code=404, detail=f"Service '{callsign_upper}' not found"
+        )
+
+    LOG.info(f"Admin {'featured' if new_featured else 'unfeatured'} service {callsign_upper}")
+
+    # Redirect back to referring page (detail or list)
+    referer = request.headers.get("referer", f"/admin/services/{callsign_upper}")
+    return RedirectResponse(url=referer, status_code=303)
+
+
 @app.post("/admin/services/{callsign}/delete", response_class=HTMLResponse)
 async def admin_delete_service(
     request: Request,
