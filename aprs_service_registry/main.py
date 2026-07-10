@@ -1304,14 +1304,11 @@ async def admin_toggle_featured(
     db: RegistryDB = request.app.state.db
     callsign_upper = callsign.upper()
 
-    service = db.get_service(callsign_upper)
-    if service is None:
+    new_featured = db.toggle_featured(callsign_upper, actor=("admin", credentials.username))
+    if new_featured is None:
         raise HTTPException(
             status_code=404, detail=f"Service '{callsign_upper}' not found"
         )
-
-    new_featured = not service.get("featured", False)
-    db.set_featured(callsign_upper, new_featured, actor=("admin", credentials.username))
 
     LOG.info(f"Admin {'featured' if new_featured else 'unfeatured'} service {callsign_upper}")
 

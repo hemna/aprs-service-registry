@@ -98,6 +98,23 @@ class TestServices:
         # Should not raise on nonexistent callsign
         db.set_featured("NOPE", True)
 
+    def test_toggle_featured(self, db):
+        db.upsert_service("TEST1", {"featured": False})
+
+        result = db.toggle_featured("TEST1", actor=("admin", "WB4BOR"))
+        assert result is True
+        svc = db.get_service("TEST1")
+        assert svc["featured"] is True
+
+        result = db.toggle_featured("TEST1", actor=("admin", "WB4BOR"))
+        assert result is False
+        svc = db.get_service("TEST1")
+        assert svc["featured"] is False
+
+    def test_toggle_featured_nonexistent(self, db):
+        result = db.toggle_featured("NOPE")
+        assert result is None
+
     def test_search_by_query(self, db):
         db.upsert_service("WXBOT", {"description": "Weather bot"})
         db.upsert_service("EMAIL-2", {"description": "Email gateway"})
