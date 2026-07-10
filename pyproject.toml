@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aprsd-service-registry"
-version = "1.6.0"
+version = "1.6.1"
 description = "Amateur radio APRS Services registry"
 readme = { file = "README.rst", content-type = "text/x-rst" }
 license = { text = "Apache-2.0" }

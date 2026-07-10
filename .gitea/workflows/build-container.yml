@@ -37,5 +37,3 @@ jobs:
           tags: |
             hemna6969/aprs-service-registry:latest
             hemna6969/aprs-service-registry:${{ steps.version.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
