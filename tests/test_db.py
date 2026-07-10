@@ -81,6 +81,23 @@ class TestServices:
         svc = db.get_service("TEST1")
         assert svc["featured"] is True
 
+    def test_set_featured(self, db):
+        db.upsert_service("TEST1", {"featured": False})
+        svc = db.get_service("TEST1")
+        assert svc["featured"] is False
+
+        db.set_featured("TEST1", True, actor=("admin", "WB4BOR"))
+        svc = db.get_service("TEST1")
+        assert svc["featured"] is True
+
+        db.set_featured("TEST1", False, actor=("admin", "WB4BOR"))
+        svc = db.get_service("TEST1")
+        assert svc["featured"] is False
+
+    def test_set_featured_nonexistent(self, db):
+        # Should not raise on nonexistent callsign
+        db.set_featured("NOPE", True)
+
     def test_search_by_query(self, db):
         db.upsert_service("WXBOT", {"description": "Weather bot"})
         db.upsert_service("EMAIL-2", {"description": "Email gateway"})

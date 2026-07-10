@@ -320,6 +320,25 @@ class RegistryDB:
                 "status_change", {"old": old["status"], "new": new_status}
             )
 
+    def set_featured(self, callsign: str, featured: bool,
+                     actor: tuple[str, str | None] = ("admin", None)):
+        """Set or unset the featured flag on a service."""
+        callsign_upper = callsign.upper()
+        with self._connect() as conn:
+            old = conn.execute(
+                "SELECT featured FROM services WHERE callsign = ?", (callsign_upper,)
+            ).fetchone()
+            if old is None:
+                return
+            conn.execute(
+                "UPDATE services SET featured = ?, updated_at = ? WHERE callsign = ?",
+                (int(featured), self._now(), callsign_upper),
+            )
+            self._audit(
+                conn, actor[0], actor[1], "service", callsign_upper,
+                "set_featured", {"old": bool(old["featured"]), "new": featured}
+            )
+
     def delete_service(self, callsign: str,
                        actor: tuple[str, str | None] = ("admin", None)):
         """Soft delete a service (set status to 'deleted')."""
