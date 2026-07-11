@@ -20,6 +20,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from aprs_service_registry import conf, utils  # noqa
+from aprs_service_registry._version import __version__
 from aprs_service_registry.db import RegistryDB
 from aprs_service_registry.health_checker import (
     calculate_uptime,
@@ -85,6 +86,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
+templates.env.globals["app_version"] = __version__
 
 # HTTP Basic Auth for admin routes
 security = HTTPBasic()
