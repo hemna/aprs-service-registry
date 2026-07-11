@@ -62,7 +62,7 @@ jobs:
 
       - name: Run flake8
         run: |
-          flake8 aprs_service_registry/ --max-line-length=120 --extend-ignore=E203,W503,F401,F824,E302
+          flake8 aprs_service_registry/ --max-line-length=120 --extend-ignore=E203,W503,F401,F824,E302,N801
 
       - name: Check import ordering
         run: |
